@@ -14,7 +14,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This bot is structured in layers.
+# - IRCClient   : Networking and IRC protocol
+#     -> IRCEvents ->
+# - BotCommands : commands, identity, authentication, access
+#     -> BotEvents ->
+# - DawdleBot   : Actual game
+#
+# IRCEvents wrap IRCMessages, and BotEvents wrap IRCEvents.
+
 import argparse
+import asyncio
+import collections
 import crypt
 import logging
 import os
@@ -98,6 +109,8 @@ silent_mode = False
 pause_mode = False
 
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
+
+
 def parse_val(s):
     if s in ["on", "yes", "true"]:
         return True
@@ -139,50 +152,68 @@ def read_config(path):
         sys.exit(1)
     return newconf
 
-def dict_factory(cursor, row):
-    d = {}
-    for idx, col in enumerate(cursor.description):
-        d[col[0]] = row[idx]
-    return d
+
+class User(object):
+    def __init__(self, d):
+        for k,v in d.items():
+            setattr(self, k, v)
+
 
 class UserDB(object):
+
     FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmesg", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
+
+
+    @classmethod
+    def dict_factory(cls, cursor, row):
+        d = {}
+        for idx, col in enumerate(cursor.description):
+            d[col[0]] = row[idx]
+        return d
+
 
     def __init__(self, dbpath):
         self._dbpath = dbpath
         self._db = None
         self._users = {}
 
-    def exists(self):
-        return os.path.exists(self._dbpath)
+    def __getitem__(self, uname):
+        return self._users[uname]
+
 
     def _connect(self):
         if self._db is None:
             self._db = sqlite3.connect(self._dbpath)
-            self._db.row_factory = dict_factory
+            self._db.row_factory = UserDB.dict_factory
 
         return self._db
 
+
+    def exists(self):
+        return os.path.exists(self._dbpath)
+
+
     def load(self):
         """Load all users from database into memory"""
+        self._users = {}
         with self._connect() as con:
             cur = con.execute("select * from users")
-            for u in cur.fetchall():
-                self._users[u["name"]] = u
+            for d in cur.fetchall():
+                self._users[d['name']] = User(d)
+
 
     def write(self):
         """Write all users into database"""
         with self._connect() as cur:
             update_fields = ",".join(f"{k}=:{k}" for k in UserDB.FIELDS)
-            cur.executemany(f"update users set {update_fields} where name=:name", self._users.values())
+            cur.executemany(f"update users set {update_fields} where name=:name",
+                            [vars(u) for u in self._users.values()])
 
 
     def create(self):
         with self._connect() as cur:
             cur.execute(f"create table users ({','.join(UserDB.FIELDS)})")
 
-    def __getitem__(self, uname):
-        return self._users[uname]
 
     def new_user(self, uname, uclass, upass):
         global conf
@@ -192,19 +223,19 @@ class UserDB(object):
 
         uclass = uclass[:30]
         upass = crypt.crypt(upass, crypt.mksalt())
-        u = {
+        d = {
             'name': uname,
             'cclass': uclass,
             'pw': upass,
             'isadmin': False,
             'level': 0,
-            'nextlvl': conf["rpbase"],
+            'nextlvl': 0,
             'nick': "",
             'userhost': "",
             'online': False,
             'idled': 0,
-            'posx': random.randint(0,conf["mapx"]-1),
-            'posy': random.randint(0,conf["mapy"]-1),
+            'posx': 0,
+            'posy': 0,
             'penmesg': 0,
             'pennick': 0,
             'penpart': 0,
@@ -226,13 +257,19 @@ class UserDB(object):
             'weapon': 0,
             'alignment': "n"
         }
-        self._users[uname] = u
-
         with self._connect() as cur:
-            cur.execute(f"insert into users values ({('?, ' * len(u))[:-2]})", [u[k] for k in UserDB.FIELDS])
+            cur.execute(f"insert into users values ({('?, ' * len(d))[:-2]})",
+                        [d[k] for k in UserDB.FIELDS])
             cur.commit()
 
+        u = User(d)
+        self._users[uname] = u
+
         return u
+
+    def pw_check(self, uname, upass):
+        return crypt.crypt(upass, _users[uname].pw) == _users[uname].pw
+
 
 def first_setup():
     global conf
@@ -249,10 +286,137 @@ def first_setup():
 
     db.create()
     u = db.new_user(uname, uclass, upass)
-    u["isadmin"] = True
+    u.isadmin = True
     db.write()
 
     print(f"OK, wrote you into {conf['dbfile']}")
+
+
+class IRCClient:
+    """IRCClient acts as a layer between the IRC protocol and the bot protocol.
+
+    This class has the following responsibilities:
+    - Connection and disconnection
+    - Nick recovery
+    - Output throttling
+    - NickServ authentication
+    - IRC message decoding and parsing
+    - Calling methods on the bot interface
+ """
+    MESSAGE_RE = re.compile(r'^(?:@(\S*) )?(?::([^ !]*)(?:!([^ @]*)(?:@([^ ]*))?)?\s+)?(\S+)\s*((?:[^:]\S*(?:\s+|$))*)(?::(.*))?')
+
+    Message = collections.namedtuple('Message', ['tags', 'src', 'user', 'host', 'cmd', 'args', 'trailing', 'line', 'time'])
+
+
+    def __init__(self):
+        _writer = None
+
+
+    async def connect(self, addr, port):
+        reader, self._writer = await asyncio.open_connection(addr, port, ssl=True)
+        self.send(f"NICK {conf['botnick']}")
+        self.send(f"USER {conf['botuser']} 0 * :{conf['botrlnm']}")
+        while True:
+            line = await reader.readline()
+            if not line:
+                break
+            if conf["debug"]:
+                print("<- ", line)
+            msg = self.parse_message(line)
+            self.dispatch(msg)
+
+
+    def send(self, s):
+        if conf["debug"]:
+            print("-> ", s)
+        self._writer.write(bytes(s+"\r\n", encoding='utf8'))
+
+
+    def parse_message(self, line):
+        # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
+        try:
+            line = str(line, encoding='utf8')
+        except UnicodeDecodeError:
+            line = str(line, encoding='latin-1')
+
+        # Parse IRC message with a regular expression
+        match = IRCClient.MESSAGE_RE.match(line)
+        if not match:
+            return None
+        rawtags, src, user, host, cmd, args, trailing = match.groups()
+        # IRCv3 supports tags
+        tags = dict()
+        if rawtags is not None and rawtags != "":
+            for pairstr in rawtags.split(','):
+                pair = pairstr.split('=')
+                if len(pair) == 2:
+                    tags[pair[0]] = pair[1]
+                else:
+                    tags[pair[0]] = None
+        # Arguments before the trailing argument (after the colon) are space-delimited
+        args = args.rstrip().split(' ')
+        # There's nothing special about the trailing argument except it can have spaces.
+        if trailing != "":
+            args.append(trailing)
+        # Numeric responses specify a useless target afterwards
+        if re.match(r'^\d$', cmd):
+            args = args[1:]
+        # Support time tag, which allows servers and bouncers to send history
+        if 'time' in tags:
+            msgtime = time.mktime(time.strptime(tags['time'], "%Y-%m-%dT%H:%M:%S"))
+        else:
+            msgtime = time.time()
+        return IRCClient.Message(tags, src, user, host, cmd, args, trailing, line, msgtime)
+
+
+    def handle_ping(self, msg):
+        self.send(f"PONG {msg.trailing}")
+
+
+    def handle_376(self, msg):
+        self.send(f"MODE {conf['botnick']} {conf['botmodes']}")
+        self.send(f"JOIN {conf['botchan']}")
+
+
+    def handle_433(self, msg):
+        """Nick collision - stow our nick and try to get it back"""
+        pass
+
+    def handle_join(self, msg):
+        pass
+
+
+    def handle_part(self, msg):
+        pass
+
+
+    def handle_nick(self, msg):
+        pass
+
+
+    def handle_quit(self, msg):
+        pass
+
+
+    def handle_notice(self, msg):
+        pass
+
+
+    def handle_privmsg(self, msg):
+        pass
+
+
+    def dispatch(self, msg):
+        if hasattr(self, "handle_"+msg.cmd.lower()):
+            getattr(self, "handle_"+msg.cmd.lower())(msg)
+
+
+async def main():
+    client = IRCClient()
+    while True:
+        addr, port = conf['servers'][0].split(':')
+        await client.connect(addr, port)
+
 
 def start_bot():
     global conf
@@ -274,8 +438,8 @@ def start_bot():
     else:
         first_setup()
 
-    print(db._users)
+    asyncio.run(main())
 
-    sys.exit(0)
 
-start_bot()
+if __name__ == "__main__":
+    start_bot()
