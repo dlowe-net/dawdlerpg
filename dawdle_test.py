@@ -6,13 +6,13 @@ import sys
 import tempfile
 import unittest
 
-class TestUserDB(unittest.TestCase):
+class TestPlayerDB(unittest.TestCase):
     def test_db(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = dawdle.UserDB(os.path.join(tmpdir, 'dawdle_test.db'))
+            db = dawdle.PlayerDB(os.path.join(tmpdir, 'dawdle_test.db'))
             self.assertFalse(db.exists())
             db.create()
-            db.new_user('foo', 'bar', 'baz')
+            db.new_player('foo', 'bar', 'baz')
             db.write()
             self.assertTrue(db.exists())
             db.load()

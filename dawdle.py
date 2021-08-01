@@ -41,10 +41,10 @@ log = logging.getLogger()
 VERSION = "1.0.0"
 
 # Commands in ALLOWALL can be used by anyone.
-# Commands in ALLOWUSERS can only be used by logged-in users
+# Commands in ALLOWPLAYERS can only be used by logged-in players
 # All other commands are admin-only
 ALLOWALL = ["help", "login", "register", "quest", "version", "eval"]
-ALLOWUSERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
+ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
 
 # Penalties and their description
 PENALTIES = {"quit": 20, "nick": 30, "message": 1, "part": 200, "kick": 250, "logout": 20}
@@ -153,13 +153,13 @@ def read_config(path):
     return newconf
 
 
-class User(object):
+class Player(object):
     def __init__(self, d):
         for k,v in d.items():
             setattr(self, k, v)
 
 
-class UserDB(object):
+class PlayerDB(object):
 
     FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmesg", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
 
@@ -175,16 +175,16 @@ class UserDB(object):
     def __init__(self, dbpath):
         self._dbpath = dbpath
         self._db = None
-        self._users = {}
+        self._players = {}
 
     def __getitem__(self, uname):
-        return self._users[uname]
+        return self._players[uname]
 
 
     def _connect(self):
         if self._db is None:
             self._db = sqlite3.connect(self._dbpath)
-            self._db.row_factory = UserDB.dict_factory
+            self._db.row_factory = PlayerDB.dict_factory
 
         return self._db
 
@@ -194,31 +194,31 @@ class UserDB(object):
 
 
     def load(self):
-        """Load all users from database into memory"""
-        self._users = {}
+        """Load all players from database into memory"""
+        self._players = {}
         with self._connect() as con:
-            cur = con.execute("select * from users")
+            cur = con.execute("select * from players")
             for d in cur.fetchall():
-                self._users[d['name']] = User(d)
+                self._players[d['name']] = Player(d)
 
 
     def write(self):
-        """Write all users into database"""
+        """Write all players into database"""
         with self._connect() as cur:
-            update_fields = ",".join(f"{k}=:{k}" for k in UserDB.FIELDS)
-            cur.executemany(f"update users set {update_fields} where name=:name",
-                            [vars(u) for u in self._users.values()])
+            update_fields = ",".join(f"{k}=:{k}" for k in PlayerDB.FIELDS)
+            cur.executemany(f"update players set {update_fields} where name=:name",
+                            [vars(u) for u in self._players.values()])
 
 
     def create(self):
         with self._connect() as cur:
-            cur.execute(f"create table users ({','.join(UserDB.FIELDS)})")
+            cur.execute(f"create table players ({','.join(PlayerDB.FIELDS)})")
 
 
-    def new_user(self, uname, uclass, upass):
+    def new_player(self, uname, uclass, upass):
         global conf
 
-        if uname in self._users:
+        if uname in self._players:
             raise KeyError
 
         uclass = uclass[:30]
@@ -258,17 +258,17 @@ class UserDB(object):
             'alignment': "n"
         }
         with self._connect() as cur:
-            cur.execute(f"insert into users values ({('?, ' * len(d))[:-2]})",
-                        [d[k] for k in UserDB.FIELDS])
+            cur.execute(f"insert into players values ({('?, ' * len(d))[:-2]})",
+                        [d[k] for k in PlayerDB.FIELDS])
             cur.commit()
 
-        u = User(d)
-        self._users[uname] = u
+        u = Player(d)
+        self._players[uname] = u
 
         return u
 
     def pw_check(self, uname, upass):
-        return crypt.crypt(upass, _users[uname].pw) == _users[uname].pw
+        return crypt.crypt(upass, _players[uname].pw) == _players[uname].pw
 
 
 def first_setup():
@@ -285,7 +285,7 @@ def first_setup():
     upass = input("Enter a password for this account: ")
 
     db.create()
-    u = db.new_user(uname, uclass, upass)
+    u = db.new_player(uname, uclass, upass)
     u.isadmin = True
     db.write()
 
@@ -432,7 +432,7 @@ def start_bot():
         conf["okurls"] = args.okurl
 
     global db
-    db = UserDB(conf["dbfile"])
+    db = PlayerDB(conf["dbfile"])
     if db.exists():
         db.load()
     else:
