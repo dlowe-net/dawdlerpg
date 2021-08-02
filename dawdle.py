@@ -14,15 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This bot is structured in layers.
-# - IRCClient   : Networking and IRC protocol
-#     -> IRCEvents ->
-# - BotCommands : commands, identity, authentication, access
-#     -> BotEvents ->
-# - DawdleBot   : Actual game
-#
-# IRCEvents wrap IRCMessages, and BotEvents wrap IRCEvents.
-
 import argparse
 import asyncio
 import collections
@@ -39,12 +30,6 @@ import time
 log = logging.getLogger()
 
 VERSION = "1.0.0"
-
-# Commands in ALLOWALL can be used by anyone.
-# Commands in ALLOWPLAYERS can only be used by logged-in players
-# All other commands are admin-only
-ALLOWALL = ["help", "login", "register", "quest", "version", "eval"]
-ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
 
 # Penalties and their description
 PENALTIES = {"quit": 20, "nick": 30, "message": 1, "part": 200, "kick": 250, "logout": 20}
@@ -124,6 +109,13 @@ def parse_val(s):
     return s
 
 
+def duration(secs):
+    d, secs = int(secs / 86400), secs % 86400
+    h, secs = int(secs / 3600), secs % 3600
+    m, secs = int(secs / 60), secs % 60
+    return f"{d} day{'s' if d == 1 else ''}, {h:02d}:{m:02d}:{int(secs):02d}"
+
+
 def read_config(path):
     newconf = {"servers": [], "okurls": []}
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
@@ -164,8 +156,8 @@ class PlayerDB(object):
     FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmesg", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
 
 
-    @classmethod
-    def dict_factory(cls, cursor, row):
+    @staticmethod
+    def dict_factory(cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
             d[col[0]] = row[idx]
@@ -180,6 +172,9 @@ class PlayerDB(object):
     def __getitem__(self, uname):
         return self._players[uname]
 
+
+    def __contains__(self, uname):
+        return uname in self._players
 
     def _connect(self):
         if self._db is None:
@@ -229,7 +224,7 @@ class PlayerDB(object):
             'pw': upass,
             'isadmin': False,
             'level': 0,
-            'nextlvl': 0,
+            'nextlvl': conf['rpbase'],
             'nick': "",
             'userhost': "",
             'online': False,
@@ -267,9 +262,16 @@ class PlayerDB(object):
 
         return u
 
-    def pw_check(self, uname, upass):
-        return crypt.crypt(upass, _players[uname].pw) == _players[uname].pw
 
+    def pw_check(self, uname, upass):
+        return crypt.crypt(upass, self._players[uname].pw) == self._players[uname].pw
+
+
+    def from_nick(self, nick):
+        for u in self._players.values():
+            if u.online and u.nick == nick:
+                return u
+        return None
 
 def first_setup():
     global conf
@@ -308,18 +310,27 @@ class IRCClient:
     Message = collections.namedtuple('Message', ['tags', 'src', 'user', 'host', 'cmd', 'args', 'trailing', 'line', 'time'])
 
 
-    def __init__(self):
-        _writer = None
-
+    def __init__(self, bot):
+        self._bot = bot
+        self._writer = None
+        self._nick = conf['botnick']
 
     async def connect(self, addr, port):
         reader, self._writer = await asyncio.open_connection(addr, port, ssl=True)
         self.send(f"NICK {conf['botnick']}")
         self.send(f"USER {conf['botuser']} 0 * :{conf['botrlnm']}")
+        self._bot.connected(self)
         while True:
             line = await reader.readline()
             if not line:
+                self._bot.disconnected()
                 break
+            # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
+            try:
+                line = str(line, encoding='utf8')
+            except UnicodeDecodeError:
+                line = str(line, encoding='latin-1')
+            line = line.rstrip('\r\n')
             if conf["debug"]:
                 print("<- ", line)
             msg = self.parse_message(line)
@@ -333,12 +344,6 @@ class IRCClient:
 
 
     def parse_message(self, line):
-        # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
-        try:
-            line = str(line, encoding='utf8')
-        except UnicodeDecodeError:
-            line = str(line, encoding='latin-1')
-
         # Parse IRC message with a regular expression
         match = IRCClient.MESSAGE_RE.match(line)
         if not match:
@@ -369,50 +374,259 @@ class IRCClient:
         return IRCClient.Message(tags, src, user, host, cmd, args, trailing, line, msgtime)
 
 
-    def handle_ping(self, msg):
-        self.send(f"PONG {msg.trailing}")
-
-
-    def handle_376(self, msg):
-        self.send(f"MODE {conf['botnick']} {conf['botmodes']}")
-        self.send(f"JOIN {conf['botchan']}")
-
-
-    def handle_433(self, msg):
-        """Nick collision - stow our nick and try to get it back"""
-        pass
-
-    def handle_join(self, msg):
-        pass
-
-
-    def handle_part(self, msg):
-        pass
-
-
-    def handle_nick(self, msg):
-        pass
-
-
-    def handle_quit(self, msg):
-        pass
-
-
-    def handle_notice(self, msg):
-        pass
-
-
-    def handle_privmsg(self, msg):
-        pass
-
-
     def dispatch(self, msg):
         if hasattr(self, "handle_"+msg.cmd.lower()):
             getattr(self, "handle_"+msg.cmd.lower())(msg)
 
 
-async def main():
-    client = IRCClient()
+    def handle_ping(self, msg):
+        self.send(f"PONG :{msg.trailing}")
+
+
+    def handle_376(self, msg):
+        """RPL_ENDOFMOTD - server is ready"""
+        print("mode")
+        self.mode(conf['botnick'], conf['botmodes'])
+        self.join(conf['botchan'])
+
+    def handle_422(self, msg):
+        """ERR_NOTMOTD - server is ready, but without a MOTD"""
+        self.mode(conf['botnick'], conf['botmodes'])
+        self.join(conf['botchan'])
+        
+
+    def handle_353(self, msg):
+        """RPL_NAMREPLY - names in the channel"""
+        for nick in msg.trailing.split(' '):
+            self._bot.nick_joined(nick)
+
+
+    def handle_366(self, msg):
+        """RPL_ENDOFNAMES - the actual end of channel joining"""
+        # We know who is in the channel now
+        if 'botopcmd' in conf:
+            self.send(re.sub(r'%botnick%', self._nick, conf['botopcmd']))
+        self._bot.ready()
+
+
+    def handle_433(self, msg):
+        """ERR_NICKNAME_IN_USE - try another nick"""
+        self._nick = self._nick + "0"
+        self.nick(self._nick)
+
+    def handle_join(self, msg):
+        if msg.src != self._nick:
+            self._bot.nick_joined(msg.src)
+
+
+    def handle_part(self, msg):
+        self._bot.nick_parted(msg.src)
+
+
+    def handle_kick(self, msg):
+        self._bot.nick_kicked(msg.args[0])
+
+
+    def handle_nick(self, msg):
+        if msg.src == self._nick:
+            # Update my nick
+            self._nick = msg.args[0]
+        else:
+            if msg.src == conf['botnick']:
+                # Grab my nick that someone left
+                self.nick(conf['botnick'])
+            self._bot.nick_changed(self, msg.src, msg.args[0])
+
+
+    def handle_quit(self, msg):
+        if msg.src == conf['botnick']:
+            # Grab my nick that someone left
+            self.nick(conf['botnick'])
+        self._bot.nick_quit(msg.src)
+
+
+    def handle_notice(self, msg):
+        if msg.args[0] != self._nick:
+            # we ignore private notices
+            self._bot.channel_notice(msg.src, msg.trailing)
+
+
+    def handle_privmsg(self, msg):
+        if msg.args[0] == self._nick:
+            self._bot.private_message(msg.src, msg.trailing)
+        else:
+            self._bot.channel_message(msg.src, msg.trailing)
+
+    def nick(self, nick):
+        self.send(f"NICK {nick}")
+
+    def join(self, channel):
+        self.send(f"JOIN {channel}")
+
+
+    def notice(self, target, text):
+        self.send(f"NOTICE {target} :{text}")
+
+
+    def mode(self, target, *modeinfo):
+        self.send(f"MODE {target} {' '.join(modeinfo)}")
+
+
+    def chanmsg(self, text):
+        self.send(f"PRIVMSG {conf['botchan']} :{text}")
+
+
+class DawdleBot(object):
+    # Commands in ALLOWALL can be used by anyone.
+    # Commands in ALLOWPLAYERS can only be used by logged-in players
+    # All other commands are admin-only
+    ALLOWALL = ["help", "login", "register", "quest", "version", "eval"]
+    ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
+
+    def __init__(self, db):
+        self._irc = None
+        self._onchan = []
+        self._players = db
+
+    def connected(self, irc):
+        self._irc = irc
+
+
+    def ready(self):
+        pass
+
+
+    def disconnected(self, evt):
+        self._irc = None
+        self._onchan = []
+
+
+    def private_message(self, src, text):
+        """Private message - handle as a command"""
+        if text == '':
+            return
+        parts = text.split(' ', 1)
+        cmd = parts[0].lower()
+        if len(parts) == 2:
+            args = parts[1]
+        else:
+            args = ''
+        player = self._players.from_nick(src)
+        if cmd in DawdleBot.ALLOWPLAYERS:
+            if not player:
+                self._irc.notice(src, "You are not logged in.")
+                return
+        elif cmd not in DawdleBot.ALLOWALL:
+            if player is None or not player.isadmin:
+                self._irc.notice(src, f"You cannot do '{cmd}'.")
+                return
+        if hasattr(self, f'cmd_{cmd}'):
+            getattr(self, f'cmd_{cmd}')(player, src, args)
+
+
+    def channel_message(self, src, text):
+        pass
+
+
+    def channel_notice(self, src, text):
+        pass
+
+
+    def self_joined(self, src):
+        if 'botopcmd' in conf:
+            send(conf['botopcmd'])
+
+
+    def names_done(self):
+        pass
+
+
+    def nick_changed(self, old_nick, new_nick):
+        self._onchan.remove(old_nick)
+        self._onchan.append(new_nicK)
+        player = self._players.from_nick(src)
+        if player:
+            player.nick = new_nick
+
+
+    def nick_joined(self, src):
+        self._onchan.append(src)
+
+
+    def nick_parted(self, src):
+        self._onchan.remove(src)
+        player = self._players.from_nick(src)
+        if player:
+            player.online = False
+
+
+    def nick_quit(self, src):
+        self._onchan.remove(src)
+        player = self._players.from_nick(src)
+        if player:
+            player.online = False
+
+
+    def nick_kicked(self, target):
+        self._onchan.remove(src)
+        player = self._players.from_nick(src)
+        if player:
+            player.online = False
+
+
+    def cmd_align(self, player, nick, args):
+        if args not in ["good", "neutral", "evil"]:
+            self._irc.notice(nick, "Try: ALIGN good|neutral|evil")
+            return
+        player.alignment = args[0]
+        _players.write()
+
+
+    def cmd_help(self, player, nick, args):
+        self._irc.notice(nick, "Help?  But we are dawdling!")
+
+
+    def cmd_login(self, player, nick, args):
+        if player:
+            self._irc.notice(nick, f"Sorry, you are already online as {player.name}")
+            return
+        if nick not in self._onchan:
+            self._irc.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            return
+
+        parts = args.split(' ', 1)
+        if len(parts) != 2:
+            self._irc.notice(nick, "Try: LOGIN <username> <password>")
+            return
+        uname, upass = parts
+        if uname not in self._players:
+            self._irc.notice(nick, f"Sorry, no such account name.  Note that account names are case sensitive.")
+            return
+        if not self._players.pw_check(uname, upass):
+            self._irc.notice(nick, f"Wrong password.")
+            return
+        # Success!
+        if conf['voiceonlogin']:
+            self._irc.mode(conf['botchan'], "+v", nick)
+        player = self._players[uname]
+        player.online = True
+        player.nick = nick
+        player.lastlogin = time.time()
+        self._players.write()
+        self._irc.chanmsg(f"{player.name}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
+        self._irc.notice(nick, f"Logon successful. Next level in {duration(player.nextlvl)}.")
+
+
+    def cmd_logout(self, player, nick, args):
+        if not player:
+            self._irc.notice(nick, "You aren't logged in!")
+            return
+        self._irc.notice(nick, "You have been logged out.")
+        player.online = False
+        self._players.write()
+
+
+async def mainloop(client):
     while True:
         addr, port = conf['servers'][0].split(':')
         await client.connect(addr, port)
@@ -438,7 +652,9 @@ def start_bot():
     else:
         first_setup()
 
-    asyncio.run(main())
+    bot = DawdleBot(db)
+    client = IRCClient(bot)
+    asyncio.run(mainloop(client))
 
 
 if __name__ == "__main__":
