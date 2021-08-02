@@ -88,7 +88,7 @@ parser.add_argument("--rppenstep", type=float)
 parser.add_argument("-d", "--dbfile", "--irpgdb", "--db")
 
 args = parser.parse_args()
-rps = dict()
+conf = {}
 preferred_nick = ""
 silent_mode = False
 pause_mode = False
@@ -113,7 +113,7 @@ def duration(secs):
     d, secs = int(secs / 86400), secs % 86400
     h, secs = int(secs / 3600), secs % 3600
     m, secs = int(secs / 60), secs % 60
-    return f"{d} day{'s' if d == 1 else ''}, {h:02d}:{m:02d}:{int(secs):02d}"
+    return f"{d} day{'' if d == 1 else 's'}, {h:02d}:{m:02d}:{int(secs):02d}"
 
 
 def read_config(path):
@@ -146,9 +146,52 @@ def read_config(path):
 
 
 class Player(object):
-    def __init__(self, d):
+    @classmethod
+    def from_dict(cls, d):
+        p = cls()
         for k,v in d.items():
-            setattr(self, k, v)
+            setattr(p, k, v)
+        return p
+
+    @staticmethod
+    def new_player(pname, pclass, ppass):
+        p = Player()
+        p.name = pname
+        p.cclass = pclass
+        p.pw = crypt.crypt(ppass, crypt.mksalt())
+        p.isadmin = False
+        p.level = 0
+        p.nextlvl = conf['rpbase']
+        p.nick = ""
+        p.userhost = ""
+        p.online = False
+        p.idled = 0
+        p.posx = 0
+        p.posy = 0
+        p.penmesg = 0
+        p.pennick = 0
+        p.penpart = 0
+        p.penkick = 0
+        p.penquit = 0
+        p.penquest = 0
+        p.penlogout = 0
+        p.created = time.time()
+        p.lastlogin = time.time()
+        p.amulet = 0
+        p.charm = 0
+        p.helm = 0
+        p.boots = 0
+        p.gloves = 0
+        p.ring = 0
+        p.leggings = 0
+        p.shield = 0
+        p.tunic = 0
+        p.weapon = 0
+        p.alignment = "n"
+        return p
+
+    def set_password(self, ppass):
+        self.pw = crypt.crypt(ppass, crypt.mksalt())
 
 
 class PlayerDB(object):
@@ -169,12 +212,12 @@ class PlayerDB(object):
         self._db = None
         self._players = {}
 
-    def __getitem__(self, uname):
-        return self._players[uname]
+    def __getitem__(self, pname):
+        return self._players[pname]
 
 
-    def __contains__(self, uname):
-        return uname in self._players
+    def __contains__(self, pname):
+        return pname in self._players
 
     def _connect(self):
         if self._db is None:
@@ -183,6 +226,10 @@ class PlayerDB(object):
 
         return self._db
 
+
+    def close(self):
+        """Close the underlying db.  Used for testing."""
+        self._db.close()
 
     def exists(self):
         return os.path.exists(self._dbpath)
@@ -194,7 +241,7 @@ class PlayerDB(object):
         with self._connect() as con:
             cur = con.execute("select * from players")
             for d in cur.fetchall():
-                self._players[d['name']] = Player(d)
+                self._players[d['name']] = Player.from_dict(d)
 
 
     def write(self):
@@ -210,61 +257,31 @@ class PlayerDB(object):
             cur.execute(f"create table players ({','.join(PlayerDB.FIELDS)})")
 
 
-    def new_player(self, uname, uclass, upass):
+    def new_player(self, pname, ppass, pclass):
         global conf
 
-        if uname in self._players:
+        if pname in self._players:
             raise KeyError
 
-        uclass = uclass[:30]
-        upass = crypt.crypt(upass, crypt.mksalt())
-        d = {
-            'name': uname,
-            'cclass': uclass,
-            'pw': upass,
-            'isadmin': False,
-            'level': 0,
-            'nextlvl': conf['rpbase'],
-            'nick': "",
-            'userhost': "",
-            'online': False,
-            'idled': 0,
-            'posx': 0,
-            'posy': 0,
-            'penmesg': 0,
-            'pennick': 0,
-            'penpart': 0,
-            'penkick': 0,
-            'penquit': 0,
-            'penquest': 0,
-            'penlogout': 0,
-            'created': time.time(),
-            'lastlogin': time.time(),
-            'amulet': 0,
-            'charm': 0,
-            'helm': 0,
-            'boots': 0,
-            'gloves': 0,
-            'ring': 0,
-            'leggings': 0,
-            'shield': 0,
-            'tunic': 0,
-            'weapon': 0,
-            'alignment': "n"
-        }
+        pclass = pclass[:30]
+
+        p = Player.new_player(pname, pclass, ppass)
+        self._players[pname] = p
+
         with self._connect() as cur:
+            d = vars(p)
             cur.execute(f"insert into players values ({('?, ' * len(d))[:-2]})",
                         [d[k] for k in PlayerDB.FIELDS])
             cur.commit()
 
-        u = Player(d)
-        self._players[uname] = u
-
-        return u
+        return p
 
 
-    def pw_check(self, uname, upass):
-        return crypt.crypt(upass, self._players[uname].pw) == self._players[uname].pw
+    def delete_player(self, pname):
+        del self._players[pname]
+        with self._connect() as cur:
+            cur.execute("delete from players where name = ?", (pname,))
+            cur.commit()
 
 
     def from_nick(self, nick):
@@ -273,21 +290,29 @@ class PlayerDB(object):
                 return u
         return None
 
+
+    def check_login(self, pname, ppass):
+        result = True
+        result = result and pname in self._players
+        result = result and crypt.crypt(ppass, self._players[pname].pw) == self._players[pname].pw
+        return result
+
+
 def first_setup():
     global conf
     global db
 
     if db.exists():
         return
-    uname = input(f"{conf['dbfile']} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf['owner']}]: ")
-    if uname == "":
-        uname = conf["owner"]
-    uclass = input("Enter a character class for this account: ")
-    uclass = uclass[:30]
-    upass = input("Enter a password for this account: ")
+    pname = input(f"{conf['dbfile']} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf['owner']}]: ")
+    if pname == "":
+        pname = conf["owner"]
+    pclass = input("Enter a character class for this account: ")
+    pclass = pclass[:30]
+    ppass = input("Enter a password for this account: ")
 
     db.create()
-    u = db.new_player(uname, uclass, upass)
+    u = db.new_player(pname, pclass, ppass)
     u.isadmin = True
     db.write()
 
@@ -393,7 +418,7 @@ class IRCClient:
         """ERR_NOTMOTD - server is ready, but without a MOTD"""
         self.mode(conf['botnick'], conf['botmodes'])
         self.join(conf['botchan'])
-        
+
 
     def handle_353(self, msg):
         """RPL_NAMREPLY - names in the channel"""
@@ -586,6 +611,10 @@ class DawdleBot(object):
         self._irc.notice(nick, "Help?  But we are dawdling!")
 
 
+    def cmd_version(self, player, nick, args):
+        self._irc.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe")
+
+
     def cmd_login(self, player, nick, args):
         if player:
             self._irc.notice(nick, f"Sorry, you are already online as {player.name}")
@@ -598,17 +627,17 @@ class DawdleBot(object):
         if len(parts) != 2:
             self._irc.notice(nick, "Try: LOGIN <username> <password>")
             return
-        uname, upass = parts
-        if uname not in self._players:
+        pname, ppass = parts
+        if pname not in self._players:
             self._irc.notice(nick, f"Sorry, no such account name.  Note that account names are case sensitive.")
             return
-        if not self._players.pw_check(uname, upass):
+        if not self._players.check_login(pname, ppass):
             self._irc.notice(nick, f"Wrong password.")
             return
         # Success!
         if conf['voiceonlogin']:
             self._irc.mode(conf['botchan'], "+v", nick)
-        player = self._players[uname]
+        player = self._players[pname]
         player.online = True
         player.nick = nick
         player.lastlogin = time.time()
@@ -617,10 +646,61 @@ class DawdleBot(object):
         self._irc.notice(nick, f"Logon successful. Next level in {duration(player.nextlvl)}.")
 
 
-    def cmd_logout(self, player, nick, args):
-        if not player:
-            self._irc.notice(nick, "You aren't logged in!")
+    def cmd_register(self, player, nick, args):
+        if player:
+            self._irc.notice(nick, f"Sorry, you are already online as {player.name}")
             return
+        if nick not in self._onchan:
+            self._irc.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            return
+
+        parts = args.split(' ', 2)
+        if len(parts) != 3:
+            self._irc.notice(nick, "Try: REGISTER <username> <password> <char class>")
+            self._irc.notice(nick, "i.e. REGISTER Poseidon MyPassword God of the Sea")
+            return
+        pname, ppass, pclass = parts
+        if pname in self._players:
+            self._irc.notice(nick, "Sorry, that character name is already in use.")
+        elif pname == self._irc._nick or pname == conf['botnick']:
+            self._irc.notice(nick, "That character name cannot be registered.")
+        elif len(pname) > 16:
+            self._irc.notice(nick, "Sorry, character names must be between 1 and 16 characters long.")
+        elif len(pclass) > 30:
+            self._irc.notice(nick, "Sorry, character classes must be between 1 and 30 characters long.")
+        elif '\001' in pname:
+            self._irc.notice(nick, "Sorry, character names may not include \\001.")
+        else:
+            player = self._players.new_player(pname, pclass, ppass)
+            player.online = True
+            player.nick = nick
+            self._irc.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
+            self._irc.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
+            self._irc.notice(nick, "NOTE: The point of the game is to see who can idle the longest. As such, talking in the channel, parting, quitting, and changing nicks all penalize you.")
+
+
+    def cmd_removeme(self, player, nick, args):
+        if args == "":
+            self._irc.notice(nick, "Try: REMOVEME <password>")
+        elif not self._players.check_login(player.name, args):
+            self._irc.notice(nick, "Wrong password.")
+        else:
+            self._irc.notice(nick, f"Account {player.name} removed.")
+            self._irc.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
+            self._players.delete_player(player.name)
+
+    def cmd_newpass(self, player, nick, args):
+        parts = args.split(' ', 1)
+        if len(parts) != 2:
+            self._irc.notice(nick, "Try: NEWPASS <old password> <new password>")
+        elif not self._players.check_login(player.name, parts[0]):
+            self._irc.notice(nick, "Wrong password.")
+        else:
+            player.set_password(parts[1])
+            self._players.write()
+            self._irc.notice(nick, "Your password was changed.")
+
+    def cmd_logout(self, player, nick, args):
         self._irc.notice(nick, "You have been logged out.")
         player.online = False
         self._players.write()
