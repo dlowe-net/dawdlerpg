@@ -146,6 +146,8 @@ def read_config(path):
 
 
 class Player(object):
+    ITEMS = ['ring', 'amulet', 'charm', 'weapon', 'helm', 'tunic', 'gloves', 'leggings', 'shield', 'boots']
+
     @classmethod
     def from_dict(cls, d):
         p = cls()
@@ -156,42 +158,106 @@ class Player(object):
     @staticmethod
     def new_player(pname, pclass, ppass):
         p = Player()
+        # name of account
         p.name = pname
+        # name of character class - affects nothing
         p.cclass = pclass
+        # hashed password
         p.pw = crypt.crypt(ppass, crypt.mksalt())
+        # admin bit
         p.isadmin = False
+        # level
         p.level = 0
+        # time in seconds to next level
         p.nextlvl = conf['rpbase']
-        p.nick = ""
-        p.userhost = ""
+        # whether or not the account is online
         p.online = False
+        # IRC nick if online
+        p.nick = ""
+        # Userhost if online - used to automatically log players back in
+        p.userhost = ""
+        # total seconds idled
         p.idled = 0
+        # X position on map
         p.posx = 0
+        # Y position on map
         p.posy = 0
-        p.penmesg = 0
+        # Total penalties from messaging
+        p.penmessage = 0
+        # Total penalties from changing nicks
         p.pennick = 0
+        # Total penalties from leaving the channel
         p.penpart = 0
+        # Total penalties from being kicked
         p.penkick = 0
+        # Total penalties from quitting
         p.penquit = 0
+        # Total penalties from losing quests
         p.penquest = 0
+        # Total penalties from using the logout command
         p.penlogout = 0
+        # Time created
         p.created = time.time()
+        # Last time logged in
         p.lastlogin = time.time()
-        p.amulet = 0
-        p.charm = 0
-        p.helm = 0
-        p.boots = 0
-        p.gloves = 0
-        p.ring = 0
-        p.leggings = 0
-        p.shield = 0
-        p.tunic = 0
-        p.weapon = 0
+        # Character alignment - should only be n, g, or e
         p.alignment = "n"
+        # Items and their names.  Named items are only rarely granted.
+        p.amulet = 0
+        p.amuletname = ''
+        p.charm = 0
+        p.charmname = ''
+        p.helm = 0
+        p.helmname = ''
+        p.boots = 0
+        p.bootsname = ''
+        p.gloves = 0
+        p.glovesname = ''
+        p.ring = 0
+        p.ringname = ''
+        p.leggings = 0
+        p.leggingsname = ''
+        p.shield = 0
+        p.shieldname = ''
+        p.tunic = 0
+        p.tunicname = ''
+        p.weapon = 0
+        p.weaponname = ''
         return p
 
     def set_password(self, ppass):
         self.pw = crypt.crypt(ppass, crypt.mksalt())
+
+    def acquire_item(self, kind, level, name=''):
+        setattr(self, kind, level)
+        setattr(self, kind+"name", name)
+
+    def swap_items(self, o, kind):
+        namefield = kind+"name"
+        tmpitem = getattr(self, kind)
+        tmpitemname = getattr(self, kindnamefield)
+        self.acquire_item(kind, getattr(o, kind), getattr(o, kindnamefield))
+        o.acquire_item(kind, tmpitem, tmpitemname)
+
+    def itemsum(self):
+        """Add up the power of all the player's items"""
+        sum = 0
+        for item in Player.ITEMS:
+            sum += getattr(self, item)
+        return sum
+
+    def battleitemsum(self):
+        """
+        Add up item power for battle.
+
+        Good players get a 10% boost, and evil players get a 10% penalty.
+        """
+        sum = self.itemsum()
+        if self.alignment == 'e':
+            return int(sum * 0.9)
+        if self.alignment == 'g':
+            return int(sum * 1.1)
+        return sum
 
 
 class PlayerDB(object):
@@ -823,7 +889,9 @@ class DawdleBot(object):
 
                 self._irc.chanmsg(f"{player.name}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
-                self.challenge_opp(player)
+                # Players below level 25 have less battles.
+                if player.level >= 25 or random.randrange(4) < 1:
+                    self.challenge_opp(player)
 
 
     def hand_of_god(self):
@@ -838,6 +906,129 @@ class DawdleBot(object):
         self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
         self._players.write()
+
+    SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlspread', 'kind', 'name', 'flavor'])
+
+    def find_item(self, player):
+        # TODO: Convert to configuration
+        # Note that order is important here - each item is less likely to be picked than the previous.
+        special_items = [SpecialItem(25, 50, 25, 'helm', "Mattt's Omniscience Grand Crown",
+                                     "Your enemies fall before you as you anticipate their every move."),
+                         SpecialItem(25, 50, 25, 'ring', "Juliet's Glorious Ring of Sparkliness",
+                                     "Your enemies are blinded by both its glory and their greed as you "
+                                     "bring desolation upon them."),
+                         SpecialItem(30, 75, 25, 'tunic', "Res0's Protectorate Plate Mail",
+                                     "Your enemies cower in fear as their attacks have no effect on you."),
+                         SpecialItem(35, 100, 25, 'amulet', "Dwyn's Storm Magic Amulet",
+                                     "Your enemies are swept away by an elemental fury before the war "
+                                     "has even begun."),
+                         SpecialItem(40, 150, 25, 'weapon', "Jotun's Fury Colossal Sword",
+                                     "Your enemies' hatred is brought to a quick end as you arc your "
+                                     "wrist, dealing the crushing blow."),
+                         SpecialItem(45, 175, 26, 'weapon', "Drdink's Cane of Blind Rage",
+                                     "Your enemies are tossed aside as you blindly swing your arm "
+                                     "around hitting stuff."),
+                         SpecialItem(48, 250, 51, 'boots', "Mrquick's Magical Boots of Swiftness",
+                                     "Your enemies are left choking on your dust as you run from them "
+                                     "very, very quickly."),
+                         SpecialItem(25, 300, 51, 'weapon', "Jeff's Cluehammer of Doom",
+                                     "Your enemies are left with a sudden and intense clarity of "
+                                     "mind... even as you relieve them of it.")]
+
+        for si in special_items:
+            if player.level >= si.minlvl and random.randrange(40) < 1:
+                ilvl = si.itemlvl + random.randrange(si.lvlspread)
+                player.acquire_item(si.kind, ilvl, si.name)
+                self._irc.notice(player.nick,
+                                 f"The light of the gods shines down upon you! You have "
+                                 f"found the level {ilvl} {si.name}!  {si.flavor}")
+                return
+
+        item = random.choice(Player.ITEMS)
+        level = 0
+        for num in range(1, int(player.level * 1.5)):
+            if random.randrange(1.4**(num / 4)) < 1:
+                level = num
+        old_level = int(getattr(player, item))
+        if level > old_level:
+            self._irc.notice(player.nick,
+                             f"You found a level {level} {item}! Your current {item} is only "
+                             f"level {old_level}, so it seems Luck is with you!")
+            player.acquire_item(item, level)
+            self._players.write()
+        else:
+            self._irc.notice(player.nick,
+                             f"You found a level {level} {item}. Your current {item} is "
+                             f"level {old_level}, so it seems Luck is against you.  You"
+                             f"toss the {item}.")
+
+
+    def challenge_opp(self, player):
+        """Pit player against another random player."""
+        online = self._players.online_players()
+        online.remove(player)
+        if random.randrange(len(online)+1) < 1:
+            oppname = conf['botnick']
+            oppsum = 0
+            for p in self._players:
+                oppsum = max(p.battleitemsum()+1,oppsum)
+        else:
+            opp = random.choice(online)
+            oppname = opp.name
+            oppsum = opp.battleitemsum()
+        playersum = player.battleitemsum()
+        playerroll = random.randrange(playersum)
+        opproll = random.randrange(oppsum)
+        if playerroll >= opproll:
+            gain = 20 if oppname == conf['botnick'] else int(opp.level / 4)
+            if gain < 7:
+                gain = 7
+            amount = int((gain / 100)*player.nextlvl)
+            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has challenged "
+                              f"{oppname} in combat and won! {duration(amount)} is "
+                              f"removed from {player.name}'s clock.")
+            player.nextlvl -= amount
+            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            csfactor = 35
+            if player.alignment == 'g':
+                csfactor = 50
+            elif player.alignment == 'e':
+                csfactor = 20
+            if random.randrange(csfactor) < 1 and oppname != conf['botnick']:
+                penalty = int(((5 + random.randrange(20))/100 * opp.nextlvl))
+                self._irc.chanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
+                                  f"{duration(penalty)} is added to {opp.name}'s clock.")
+                opp.nextlvl += penalty
+                self._irc.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
+            elif random.randrange(25) < 1 and oppname != conf['botnick'] and player.level > 19:
+                item = random.choice(Player.ITEMS)
+                playeritem = getattr(player, item)
+                oppitem = getattr(opp, item)
+                if oppitem > playeritem:
+                    self._irc.chanmsg(f"In the fierce battle, {opp.name} dropped their level "
+                                      f"{oppitem} {item}! {player.name} picks it up, tossing "
+                                      f"their old level {playeritem} {item} to {opp.name}.")
+                    player.swap_item(opp, item)
+        else:
+            # Losing
+            loss = 10 if oppname == conf['botnick'] else int(opp.level / 7)
+            if loss < 7:
+                loss = 7
+            amount = int((loss / 100)*player.nextlvl)
+            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has challenged "
+                              f"{oppname} in combat and lost! {duration(amount)} is "
+                              f"added to {player.name}'s clock.")
+            player.nextlvl += amount
+            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+        idfactor = 67
+        if player.alignment == 'g':
+            idfactor = 50
+        elif player.alignment == 'e':
+            idfactor = 100
+        if random.randrange(idfactor) < 1:
+            self._irc.chanmsg(f"While recovering from battle, {player.name} notices a glint "
+                              f"in the mud. Upon investigation, they find an old lost item!")
+            self.find_item(player)
 
 
     def team_battle(self):
@@ -864,12 +1055,6 @@ class DawdleBot(object):
         pass
 
 
-    def find_item(self, player):
-        pass
-
-
-    def challenge_opp(self, player):
-        pass
 
 
 async def mainloop(client):
