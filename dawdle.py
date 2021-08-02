@@ -637,6 +637,10 @@ class DawdleBot(object):
         self._irc.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe")
 
 
+    def cmd_whoami(self, player, nick, args):
+        self._irc.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
+
+
     def cmd_login(self, player, nick, args):
         if player:
             self._irc.notice(nick, f"Sorry, you are already online as {player.name}")
@@ -728,6 +732,35 @@ class DawdleBot(object):
         self._players.write()
         self.penalty(player, "logout")
 
+    def cmd_hog(self, player, nick, args):
+        self.hand_of_god()
+
+
+    def cmd_push(self, player, nick, args):
+        parts = args.split(' ')
+        if len(parts) != 2 or not re.match(r'[+-]?\d+', parts[1]):
+            self._irc.notice(nick, "Try: PUSH <char name> <seconds>")
+            return
+        if parts[0] not in self._players:
+            self._irc.notice(nick, f"No such username {parts[0]}.")
+            return
+        player = self._players[parts[0]]
+        amount = int(parts[1])
+        if amount == 0:
+            self._irc.notice(nick, "That would not be interesting.")
+            return
+
+        if amount > player.nextlvl:
+            self._irc.notice(nick,
+                             f"Time to level for {player.name} ({player.nextlvl}s) "
+                             f"is lower than {amount}; setting TTL to 0.")
+            amount = player.nextlvl
+        player.nextlvl -= amount
+        direction = 'towards' if amount > 0 else 'away from'
+        self._irc.notice(nick, f"{player.name} now reaches level {player.level + 1} in {duration(player.nextlvl)}.")
+        self._irc.chanmsg(f"{nick} has pushed {player.name} {abs(amount)} seconds {direction} "
+                          f"level {player.level + 1}.  {player.name} reaches next level "
+                          f"in {duration(player.nextlvl)}.")
 
 
     def penalize(self, player, kind, text=None):
