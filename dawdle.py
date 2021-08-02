@@ -249,7 +249,7 @@ class PlayerDB(object):
         with self._connect() as cur:
             update_fields = ",".join(f"{k}=:{k}" for k in PlayerDB.FIELDS)
             cur.executemany(f"update players set {update_fields} where name=:name",
-                            [vars(u) for u in self._players.values()])
+                            [vars(p) for p in self._players.values()])
 
 
     def create(self):
@@ -285,9 +285,9 @@ class PlayerDB(object):
 
 
     def from_nick(self, nick):
-        for u in self._players.values():
-            if u.online and u.nick == nick:
-                return u
+        for p in self._players.values():
+            if p.online and p.nick == nick:
+                return p
         return None
 
 
@@ -296,6 +296,10 @@ class PlayerDB(object):
         result = result and pname in self._players
         result = result and crypt.crypt(ppass, self._players[pname].pw) == self._players[pname].pw
         return result
+
+
+    def online_players(self):
+        return [p for p in self._players.values() if p.online]
 
 
 def first_setup():
@@ -312,8 +316,8 @@ def first_setup():
     ppass = input("Enter a password for this account: ")
 
     db.create()
-    u = db.new_player(pname, pclass, ppass)
-    u.isadmin = True
+    p = db.new_player(pname, pclass, ppass)
+    p.isadmin = True
     db.write()
 
     print(f"OK, wrote you into {conf['dbfile']}")
