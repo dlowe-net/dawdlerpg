@@ -516,18 +516,25 @@ class DawdleBot(object):
         self._irc = None
         self._onchan = []
         self._players = db
+        self._state = 'disconnected'
 
     def connected(self, irc):
         self._irc = irc
+        self._state = 'connected'
 
 
     def ready(self):
-        pass
+        self._state = 'ready'
+        self._rpcheck_task = asyncio.create_task(self.rpcheck_loop())
 
 
     def disconnected(self, evt):
         self._irc = None
         self._onchan = []
+        self._state = 'disconnected'
+        if self._rpcheck_task:
+            self._rpcheck_task.cancel()
+            self._rpcheck_task = None
 
 
     def private_message(self, src, text):
@@ -554,11 +561,15 @@ class DawdleBot(object):
 
 
     def channel_message(self, src, text):
-        pass
+        player = self._players.from_nick(src)
+        if player:
+            self.penalty(player, "message")
 
 
     def channel_notice(self, src, text):
-        pass
+        player = self._players.from_nick(src)
+        if player:
+            self.penalty(player, "message")
 
 
     def self_joined(self, src):
@@ -576,6 +587,7 @@ class DawdleBot(object):
         player = self._players.from_nick(src)
         if player:
             player.nick = new_nick
+            self.penalty(player, "nick")
 
 
     def nick_joined(self, src):
@@ -586,21 +598,27 @@ class DawdleBot(object):
         self._onchan.remove(src)
         player = self._players.from_nick(src)
         if player:
+            self.penalty(player, "part")
             player.online = False
+            self._players.write()
 
 
     def nick_quit(self, src):
         self._onchan.remove(src)
         player = self._players.from_nick(src)
         if player:
+            self.penalty(player, "quit")
             player.online = False
+            self._players.write()
 
 
     def nick_kicked(self, target):
         self._onchan.remove(src)
         player = self._players.from_nick(src)
         if player:
+            self.penalty(player, "kick")
             player.online = False
+            self._players.write()
 
 
     def cmd_align(self, player, nick, args):
@@ -708,6 +726,117 @@ class DawdleBot(object):
         self._irc.notice(nick, "You have been logged out.")
         player.online = False
         self._players.write()
+        self.penalty(player, "logout")
+
+
+
+    def penalize(self, player, kind, text=None):
+        penalty = PENALITIES[kind]
+        if text:
+            penalty *= len(text)
+        penality *= conf['rppenstep'] ** player.level
+        if 'limitpen' in conf and penalty > conf['limitpen']:
+            penalty = conf['limitpen']
+        setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
+        if kind != 'quit':
+            self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
+    async def rpcheck_loop(self):
+        last_time = time.time() - 1
+        while self._state == 'ready':
+            await asyncio.sleep(conf['self_clock'])
+            now = time.time()
+            self.rpcheck(now - last_time)
+            last_time = now
+
+    def rpcheck(self, passed):
+        online_players = self._players.online_players()
+        online_count = 0
+        evil_count = 0
+        good__count = 0
+        for player in online_players:
+            online_count += 1
+            if player.alignment == 'e':
+                evil_count += 1
+            elif player.alignment == 'g':
+                good_count += 1
+        if random.randrange(20 * 86400/conf['self_clock']) < online_count:
+            self.hand_of_god()
+        if random.randrange(24 * 86400/conf['self_clock']) < online_count:
+            self.team_battle()
+        if random.randrange(8 * 86400/conf['self_clock']) < online_count:
+            self.calamity()
+        if random.randrange(4 * 86400/conf['self_clock']) < online_count:
+            self.godsend()
+        if random.randrange(8 * 86400/conf['self_clock']) < online_count:
+            self.evilness()
+        if random.randrange(12 * 86400/conf['self_clock']) < online_count:
+            self.goodness()
+
+        self.move_players()
+
+        if not pause_mode:
+            self._players.write()
+
+        for player in online_players:
+            player.nextlvl -= passed
+            player.idled += passed
+            if player.nextlvl < 1:
+                player.level += 1
+                if player.level > 60:
+                    # linear after level 60
+                    player.nextlvl = int(conf['rpbase'] * (conf['rpstep'] ** 60 + (86400 * (player.level - 60))))
+                else:
+                    player.nextlvl = int(conf['rpbase'] * (conf['rpstep'] ** player.level))
+
+                self._irc.chanmsg(f"{player.name}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
+                self.find_item(player)
+                self.challenge_opp(player)
+
+
+    def hand_of_god(self):
+        player = random.choice(self._players.online_players())
+        amount = int(player.nextlvl * (5 + random.randrange(71))/100)
+        if random.randrange(5) > 0:
+            self._irc.chanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {player.name} {duration(amount)} toward level {player.level + 1}.")
+            player.nextlvl -= amount
+        else:
+            self._irc.chanmsg(f"Thereupon He stretched out His little finger among them and consumed {player.name} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
+            player.nextlvl += amount
+        self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+
+        self._players.write()
+
+
+    def team_battle(self):
+        pass
+
+
+    def calamity(self):
+        pass
+
+
+    def godsend(self):
+        pass
+
+
+    def evilness(self):
+        pass
+
+
+    def goodness(self):
+        pass
+
+
+    def move_players(self):
+        pass
+
+
+    def find_item(self, player):
+        pass
+
+
+    def challenge_opp(self, player):
+        pass
 
 
 async def mainloop(client):
