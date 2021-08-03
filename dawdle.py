@@ -859,12 +859,16 @@ class DawdleBot(object):
         if kind != 'quit':
             self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
     async def rpcheck_loop(self):
-        last_time = time.time() - 1
-        while self._state == 'ready':
-            await asyncio.sleep(conf['self_clock'])
-            now = time.time()
-            self.rpcheck(now - last_time)
-            last_time = now
+        try:
+            last_time = time.time() - 1
+            while self._state == 'ready':
+                await asyncio.sleep(conf['self_clock'])
+                now = time.time()
+                self.rpcheck(int(now - last_time))
+                last_time = now
+        except Exception as err:
+            print(err)
+            sys.exit(2)
 
     def rpcheck(self, passed):
         online_players = self._players.online_players()
