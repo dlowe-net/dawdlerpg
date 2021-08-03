@@ -377,7 +377,7 @@ class PlayerDB(object):
         return result
 
 
-    def online_players(self):
+    def online(self):
         return [p for p in self._players.values() if p.online]
 
     def max_player_power(self):
@@ -588,7 +588,7 @@ class IRCClient:
 
 
 SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlspread', 'kind', 'name', 'flavor'])
-
+Quest = collections.namedtuple('Quest', ['questors', 'mode', 'text', 'qtime', 'p1', 'p2', 'stage'])
 
 class DawdleBot(object):
     # Commands in ALLOWALL can be used by anyone.
@@ -598,10 +598,12 @@ class DawdleBot(object):
     ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
 
     def __init__(self, db):
-        self._irc = None
-        self._onchan = []
-        self._players = db
-        self._state = 'disconnected'
+        self._irc = None             # irc connection
+        self._onchan = []            # all players in the channel
+        self._players = db           # the player database
+        self._state = 'disconnected' # connected, disconnected, or ready
+        self._quest = None      # quest if any
+        self._qtimer = 0        # time until next quest
 
     def connected(self, irc):
         self._irc = irc
@@ -611,6 +613,7 @@ class DawdleBot(object):
     def ready(self):
         self._state = 'ready'
         self._rpcheck_task = asyncio.create_task(self.rpcheck_loop())
+        self._qtimer = time.time() + random.randrange(12, 24)*3600
 
 
     def disconnected(self, evt):
@@ -643,6 +646,8 @@ class DawdleBot(object):
                 return
         if hasattr(self, f'cmd_{cmd}'):
             getattr(self, f'cmd_{cmd}')(player, src, args)
+        else:
+            self._irc.notice(src, f"'{cmd} isn't actually a command.")
 
 
     def channel_message(self, src, text):
@@ -801,6 +806,7 @@ class DawdleBot(object):
             self._irc.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
             self._players.delete_player(player.name)
 
+
     def cmd_newpass(self, player, nick, args):
         parts = args.split(' ', 1)
         if len(parts) != 2:
@@ -812,11 +818,13 @@ class DawdleBot(object):
             self._players.write()
             self._irc.notice(nick, "Your password was changed.")
 
+
     def cmd_logout(self, player, nick, args):
         self._irc.notice(nick, "You have been logged out.")
         player.online = False
         self._players.write()
         self.penalty(player, "logout")
+
 
     def cmd_hog(self, player, nick, args):
         self.hand_of_god()
@@ -863,8 +871,46 @@ class DawdleBot(object):
             self.evilness()
         elif args == 'goodness':
             self.goodness()
+        elif args == 'battle':
+            self.challenge_opp(player)
+
+
+    def cmd_quest(self, player, nick, args):
+        if self._quest is None:
+            self._irc.notice(nick, "There is no active quest.")
+        elif self._quest.mode == 1:
+            qp = quest.questors
+            self._irc.notice(nick,
+                             f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                             f"are on a quest to {quest.text}. Quest to complete in "
+                             f"{duration(quest.qtime - time.time())}.")
+        elif self._quest.mode == 2:
+            qp = quest.questors
+            mapnotice = ''
+            if 'mapurl' in conf:
+                mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
+            self._irc.notice(nick,
+                             f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                             f"are on a quest to {quest.text}. Participants must first reach "
+                             f"({quest.dests[0][0]}, {quest.dest[0][1]}), then "
+                             f"({quest.dests[1][0]}, {quest.dest[1][1]}).{mapnotice}")
+
 
     def penalize(self, player, kind, text=None):
+        if self._quest:
+            if player in self._quest.questors:
+                self._irc.chanmsg(player.name + "'s cowardice has brought the wrath of the gods "
+                                  "down upon them.  All their great wickedness makes "
+                                  "them heavy with lead, and to tend downwards with "
+                                  "great weight and pressure towards hell. Therefore "
+                                  "have they drawn themself 30 steps closer to that "
+                                  "gaping maw.")
+                gain = int(30 * (conf['rppenstep'] ** player.level))
+                player.penquest += gain
+                player.nextlvl += gain
+                self._quest = None
+                self._qtimer = time.time() + 12 * 3600
+
         penalty = PENALITIES[kind]
         if text:
             penalty *= len(text)
@@ -874,6 +920,8 @@ class DawdleBot(object):
         setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
         if kind != 'quit':
             self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
+
+
     async def rpcheck_loop(self):
         try:
             last_time = time.time() - 1
@@ -887,7 +935,7 @@ class DawdleBot(object):
             sys.exit(2)
 
     def rpcheck(self, passed):
-        online_players = self._players.online_players()
+        online_players = self._players.online()
         online_count = 0
         evil_count = 0
         good_count = 0
@@ -911,6 +959,7 @@ class DawdleBot(object):
             self.goodness()
 
         self.move_players()
+        self.quest_check()
 
         if not pause_mode:
             self._players.write()
@@ -934,7 +983,7 @@ class DawdleBot(object):
 
 
     def hand_of_god(self):
-        player = random.choice(self._players.online_players())
+        player = random.choice(self._players.online())
         amount = int(player.nextlvl * (5 + random.randrange(71))/100)
         if random.randrange(5) > 0:
             self._irc.chanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {player.name} {duration(amount)} toward level {player.level + 1}.")
@@ -1001,7 +1050,7 @@ class DawdleBot(object):
                              f"Your current {Player.ITEMDESC[item]} is level {old_level}, "
                              f"so it seems Luck is against you.  You toss the {Player.ITEMDESC[item]}.")
 
-    def pvp_battle(player, opp, flavor_start, flavor_win, flavor_loss):
+    def pvp_battle(self, player, opp, flavor_start, flavor_win, flavor_loss):
         if opp is None:
             oppname = conf['botnick']
             oppsum = self._players.max_player_power()+1
@@ -1069,14 +1118,14 @@ class DawdleBot(object):
 
     def challenge_opp(self, player):
         """Pit player against another random player."""
-        op = self._players.online_players()
+        op = self._players.online()
         op.remove(player)       # Let's not fight ourselves
         op.append(None)         # This is the bot opponent
         self.pvp_battle(player, random.choice(op), 'challenged', 'and won', 'and lost')
 
 
     def team_battle(self):
-        op = self._players.online_players()
+        op = self._players.online()
         if len(op) < 6:
             return
         op = random.shuffle(op)
@@ -1100,7 +1149,7 @@ class DawdleBot(object):
 
 
     def calamity(self):
-        player = random.choice(self._players.online_players())
+        player = random.choice(self._players.online())
         if not player:
             return
 
@@ -1145,7 +1194,7 @@ class DawdleBot(object):
 
 
     def godsend(self):
-        player = random.choice(self._players.online_players())
+        player = random.choice(self._players.online())
         if not player:
             return
 
@@ -1191,7 +1240,7 @@ class DawdleBot(object):
 
 
     def evilness(self):
-        op = self._players.online_players()
+        op = self._players.online()
         evil_p = [p for p in op if p.alignment == 'e']
         if not evil_p:
             return
@@ -1220,7 +1269,7 @@ class DawdleBot(object):
                 self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
     def goodness(self):
-        op = self._players.online_players()
+        op = self._players.online()
         good_p = [p for p in op if p.alignment == 'g']
         if len(good_p) < 2:
             return
@@ -1237,21 +1286,42 @@ class DawdleBot(object):
 
 
     def move_players(self):
-        op = self._players.online_players()
+        op = self._players.online()
         if not op:
             return
         random.shuffle(op)
         mapx = conf['mapx']
         mapy = conf['mapy']
         combatants = dict()
+        if self._quest and self._quest.mode == 2:
+            for p in self._quest.questors:
+                # mode 2 questors always move towards the next goal
+                distx = p.posx - self._quest.dest[0][0]
+                if distx != 0:
+                    if abs(distx) > mapx/2:
+                        distx = -distx
+                    xdir = distx / abs(distx)
+                    p.posx = (p.posx + xdir) % mapx
+
+                disty = p.posy - self._quest.dest[0][1]
+                if disty != 0:
+                    if abs(disty) > mapy/2:
+                        disty = -disty
+                    ydir = disty / abs(disty)
+                    p.posy = (p.posy + ydir) % mapy
+                # take questors out of rotation for movement and pvp
+                op.remove(p)
+
         for p in op:
+            # everyone else wanders aimlessly
             p.posx = (p.posx + random.randrange(-1,1)) % mapx
             p.posy = (p.posy + random.randrange(-1,1)) % mapy
+
             if (p.posx, p.posy) in combatants:
                 combatant = combatants[(p.posx, p.posy)]
                 if combatant.isadmin and random.randrange(100) < 1:
                     self._irc.chanmsg(f"{p.name} encounters {combatant.name} and bows humbly.")
-                if random.randrange(len(op)) < 1:
+                elif random.randrange(len(op)) < 1:
                     self.pvp_battle(p, combatant,
                                     'come upon',
                                     'and taken them in combat',
@@ -1259,6 +1329,83 @@ class DawdleBot(object):
                     del combatants[(p.posx, p.posy)]
             else:
                 combatants[(p.posx, p.posy)] = p
+
+
+    def quest_check(self):
+        if self._quest is None:
+            if time.time() <= self._qtimer:
+                self.quest_start()
+        elif self._quest.mode == 1:
+            if time.time() <= self._quest.qtime:
+                qp = self._quest.questors
+                self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                  f"have blessed the realm by completing their quest! 25% of "
+                                  f"their burden is eliminated.")
+                for q in qp:
+                    q.nextlvl = int(q.nextlvl * 0.75)
+                self._quest = None
+                self._qtimer = time() + 6*3600
+        elif self._quest.mode == 2:
+            done = True
+            for q in self._quest.questors:
+                if q.posx != self._quest.dest[0][0] or q.posy != self._quest.dest[0][1]:
+                    done = False
+                    break
+            if done:
+                self._quest.dest = self._quest.dest[1:]
+                if len(self._quest.dest) > 0:
+                    if len(self._quest.dest) == 1:
+                        landmarks_remain = "1 landmark remains."
+                    else:
+                        landmarks_remain = f"{len(self._quest.dest)} landmarks remain."
+                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                      f"have reached a landmark on their journey! {landmarks_remain} ")
+                else:
+                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                      f"have completed their journey! 25% of "
+                                      f"their burden is eliminated.")
+                    for q in qp:
+                        q.nextlvl = int(q.nextlvl * 0.75)
+                    self._quest = None
+                    self._qtimer = time() + 6*3600
+
+
+    def quest_start(self):
+        latest_login_time = time.time() - 36000
+        qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
+        if len(qp) < 4:
+            return
+        qp = random.shuffle(qp)[:4]
+        # TODO: reading this file every time is silly
+        with open(conf['eventsfile']) as inf:
+            lines = [line.rstrip() for line in inf.readlines() if line.startswith("Q")]
+        questconf = random.choice(lines)
+        match = (re.match(r'^Q(1) (.*)', questconf) or
+                 re.match(r'^Q(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
+        if not match:
+            return
+        self._quest = Quest(questors=qp)
+        if match[1] == '1':
+            self._quest.mode = 1
+            self._quest.text = match[2]
+            self._quest.qtime = time.time() + random.randrange(12, 24)*3600
+        elif match[1] == '2':
+            self._quest.mode = 2
+            self._quest.dest = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
+            self._quest.text = match[5]
+
+        if self._quest.mode == 1:
+            self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+                              f"been chosen by the gods to {self._quest.text}.  Quest to end in "
+                              f"{duration(self._quest.qtime - time.time())}.")
+        elif self._quest.mode == 2:
+            mapnotice = ''
+            if 'mapurl' in conf:
+                mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
+            self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+                              f"been chosen by the gods to {self._quest.text}.  Participants must first "
+                              f"reach ({self._quest.dest[0][0]},{self._quest.dest[0][0]}), "
+                              f"then ({self._quest.dest[1][0]},{self._quest.dest[1][0]}).{mapnotice}")
 
 
 async def mainloop(client):
