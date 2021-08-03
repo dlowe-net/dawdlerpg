@@ -594,7 +594,7 @@ class DawdleBot(object):
     # Commands in ALLOWALL can be used by anyone.
     # Commands in ALLOWPLAYERS can only be used by logged-in players
     # All other commands are admin-only
-    ALLOWALL = ["help", "login", "register", "quest", "version", "eval"]
+    ALLOWALL = ["help", "login", "register", "quest", "version"]
     ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
 
     def __init__(self, db):
@@ -667,10 +667,6 @@ class DawdleBot(object):
             send(conf['botopcmd'])
 
 
-    def names_done(self):
-        pass
-
-
     def nick_changed(self, old_nick, new_nick):
         self._onchan.remove(old_nick)
         self._onchan.append(new_nicK)
@@ -730,6 +726,25 @@ class DawdleBot(object):
 
     def cmd_whoami(self, player, nick, args):
         self._irc.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
+
+
+    def cmd_status(self, player, nick, args):
+        if not conf['statuscmd']:
+            self._irc.notice(nick, "You cannot do 'status'.")
+            return
+        if args == '':
+            t = player
+        elif args not in self._players:
+            self._irc.notice(nick, f"No such player '{args}'.")
+            return
+        else:
+            t = self._players[args]
+        self._irc.notice(nick,
+                         f"{t.name}: Level {t.level} {t.cclass}; "
+                         f"Status: {'Online' if t.online else 'Offline'}; "
+                         f"TTL: {duration(t.nextlvl)}; "
+                         f"Idled: {duration(t.idled)}; "
+                         f"Item sum: {t.itemsum()}")
 
 
     def cmd_login(self, player, nick, args):
@@ -921,7 +936,6 @@ class DawdleBot(object):
         if kind != 'quit':
             self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
 
-
     async def rpcheck_loop(self):
         try:
             last_time = time.time() - 1
@@ -934,6 +948,7 @@ class DawdleBot(object):
             print(err)
             sys.exit(2)
 
+
     def rpcheck(self, passed):
         online_players = self._players.online()
         online_count = 0
@@ -945,17 +960,19 @@ class DawdleBot(object):
                 evil_count += 1
             elif player.alignment == 'g':
                 good_count += 1
-        if random.randrange(20 * 86400/conf['self_clock']) < online_count:
+
+        day_ticks = 86400/conf['self_clock']
+        if random.randrange(20 * day_ticks) < online_count:
             self.hand_of_god()
-        if random.randrange(24 * 86400/conf['self_clock']) < online_count:
+        if random.randrange(24 * day_ticks) < online_count:
             self.team_battle()
-        if random.randrange(8 * 86400/conf['self_clock']) < online_count:
+        if random.randrange(8 * day_ticks) < online_count:
             self.calamity()
-        if random.randrange(4 * 86400/conf['self_clock']) < online_count:
+        if random.randrange(4 * day_ticks) < online_count:
             self.godsend()
-        if random.randrange(8 * 86400/conf['self_clock']) < evil_count:
+        if random.randrange(8 * day_ticks) < evil_count:
             self.evilness()
-        if random.randrange(12 * 86400/conf['self_clock']) < good_count:
+        if random.randrange(12 * day_ticks) < good_count:
             self.goodness()
 
         self.move_players()
