@@ -249,8 +249,8 @@ class Player(object):
     def swap_items(self, o, kind):
         namefield = kind+"name"
         tmpitem = getattr(self, kind)
-        tmpitemname = getattr(self, kindnamefield)
-        self.acquire_item(kind, getattr(o, kind), getattr(o, kindnamefield))
+        tmpitemname = getattr(self, namefield)
+        self.acquire_item(kind, getattr(o, kind), getattr(o, namefield))
         o.acquire_item(kind, tmpitem, tmpitemname)
 
     def itemsum(self):
@@ -1001,19 +1001,14 @@ class DawdleBot(object):
                              f"Your current {Player.ITEMDESC[item]} is level {old_level}, "
                              f"so it seems Luck is against you.  You toss the {Player.ITEMDESC[item]}.")
 
-
-    def challenge_opp(self, player):
-        """Pit player against another random player."""
-        online = self._players.online_players()
-        online.remove(player)
-        if random.randrange(len(online)+1) < 1:
-            opp = None
+    def pvp_battle(player, opp, flavor_start, flavor_win, flavor_loss):
+        if opp is None:
             oppname = conf['botnick']
             oppsum = self._players.max_player_power()+1
         else:
-            opp = random.choice(online)
             oppname = opp.name
             oppsum = opp.battleitemsum()
+
         playersum = player.battleitemsum()
         playerroll = random.randrange(playersum)
         opproll = random.randrange(oppsum)
@@ -1022,42 +1017,45 @@ class DawdleBot(object):
             if gain < 7:
                 gain = 7
             amount = int((gain / 100)*player.nextlvl)
-            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has challenged "
-                              f"{oppname} [{opproll}/{oppsum}] in combat and won! "
+            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
+                              f"{oppname} [{opproll}/{oppsum}] {flavor_win}! "
                               f"{duration(amount)} is removed from {player.name}'s clock.")
             player.nextlvl -= amount
-            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
-            csfactor = 35
-            if player.alignment == 'g':
-                csfactor = 50
-            elif player.alignment == 'e':
-                csfactor = 20
-            if random.randrange(csfactor) < 1 and opp is not None:
-                penalty = int(((5 + random.randrange(20))/100 * opp.nextlvl))
-                self._irc.chanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
-                                  f"{duration(penalty)} is added to {opp.name}'s clock.")
-                opp.nextlvl += penalty
-                self._irc.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
-            elif random.randrange(25) < 1 and opp is not None and player.level > 19:
-                item = random.choice(Player.ITEMS)
-                playeritem = getattr(player, item)
-                oppitem = getattr(opp, item)
-                if oppitem > playeritem:
-                    self._irc.chanmsg(f"In the fierce battle, {opp.name} dropped their level "
-                                      f"{oppitem} {Player.ITEMDESC[item]}! {player.name} picks it up, tossing "
-                                      f"their old level {playeritem} {Player.ITEMDESC[item]} to {opp.name}.")
-                    player.swap_item(opp, item)
+            if player.nextlvl > 0:
+                self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            if opp is not None:
+                csfactor = 35
+                if player.alignment == 'g':
+                    csfactor = 50
+                elif player.alignment == 'e':
+                    csfactor = 20
+                if random.randrange(csfactor) < 1:
+                    penalty = int(((5 + random.randrange(20))/100 * opp.nextlvl))
+                    self._irc.chanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
+                                      f"{duration(penalty)} is added to {opp.name}'s clock.")
+                    opp.nextlvl += penalty
+                    self._irc.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
+                elif player.level > 19 and random.randrange(25) < 1:
+                    item = random.choice(Player.ITEMS)
+                    playeritem = getattr(player, item)
+                    oppitem = getattr(opp, item)
+                    if oppitem > playeritem:
+                        self._irc.chanmsg(f"In the fierce battle, {opp.name} dropped their level "
+                                          f"{oppitem} {Player.ITEMDESC[item]}! {player.name} picks it up, tossing "
+                                          f"their old level {playeritem} {Player.ITEMDESC[item]} to {opp.name}.")
+                        player.swap_items(opp, item)
         else:
             # Losing
             loss = 10 if oppname == conf['botnick'] else int(opp.level / 7)
             if loss < 7:
                 loss = 7
             amount = int((loss / 100)*player.nextlvl)
-            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has challenged "
-                              f"{oppname} in combat and lost! {duration(amount)} is "
+            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
+                              f"{oppname} {flavor_loss}! {duration(amount)} is "
                               f"added to {player.name}'s clock.")
             player.nextlvl += amount
             self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+
         idfactor = 67
         if player.alignment == 'g':
             idfactor = 50
@@ -1067,6 +1065,14 @@ class DawdleBot(object):
             self._irc.chanmsg(f"While recovering from battle, {player.name} notices a glint "
                               f"in the mud. Upon investigation, they find an old lost item!")
             self.find_item(player)
+
+
+    def challenge_opp(self, player):
+        """Pit player against another random player."""
+        op = self._players.online_players()
+        op.remove(player)       # Let's not fight ourselves
+        op.append(None)         # This is the bot opponent
+        self.pvp_battle(player, random.choice(op), 'challenged', 'and won', 'and lost')
 
 
     def team_battle(self):
@@ -1196,7 +1202,7 @@ class DawdleBot(object):
                 return
             item = random.choice(Player.ITEMS)
             if getattr(player, item) > getattr(target, item):
-                player.swap_item(target, item)
+                player.swap_items(target, item)
                 self._irc.chanmsg(f"{player.name} stole {target.name}'s level {getattr(player, item)} "
                                   f"{Player.ITEMDESC[item]} while they were sleeping!  {player.name} "
                                   f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
@@ -1231,9 +1237,28 @@ class DawdleBot(object):
 
 
     def move_players(self):
-        pass
-
-
+        op = self._players.online_players()
+        if not op:
+            return
+        random.shuffle(op)
+        mapx = conf['mapx']
+        mapy = conf['mapy']
+        combatants = dict()
+        for p in op:
+            p.posx = (p.posx + random.randrange(-1,1)) % mapx
+            p.posy = (p.posy + random.randrange(-1,1)) % mapy
+            if (p.posx, p.posy) in combatants:
+                combatant = combatants[(p.posx, p.posy)]
+                if combatant.isadmin and random.randrange(100) < 1:
+                    self._irc.chanmsg(f"{p.name} encounters {combatant.name} and bows humbly.")
+                if random.randrange(len(op)) < 1:
+                    self.pvp_battle(p, combatant,
+                                    'come upon',
+                                    'and taken them in combat',
+                                    'and been defeated in combat')
+                    del combatants[(p.posx, p.posy)]
+            else:
+                combatants[(p.posx, p.posy)] = p
 
 
 async def mainloop(client):
