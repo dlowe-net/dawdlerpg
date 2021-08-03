@@ -149,6 +149,18 @@ def read_config(path):
 
 class Player(object):
     ITEMS = ['ring', 'amulet', 'charm', 'weapon', 'helm', 'tunic', 'gloves', 'leggings', 'shield', 'boots']
+    ITEMDESC = {
+        'ring': 'ring',
+        'amulet': 'amulet',
+        'charm': 'charm',
+        'weapon': 'weapon',
+        'helm': 'helm',
+        'tunic': 'tunic',
+        'shield': 'shield',
+        'gloves': 'pair of gloves',
+        'leggings': 'set of leggings',
+        'boots': 'pair of boots'
+    }
 
     @classmethod
     def from_dict(cls, d):
@@ -264,7 +276,7 @@ class Player(object):
 
 class PlayerDB(object):
 
-    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmesg", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
+    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
 
 
     @staticmethod
@@ -367,6 +379,9 @@ class PlayerDB(object):
 
     def online_players(self):
         return [p for p in self._players.values() if p.online]
+
+    def max_player_power(self):
+        return max([p.itemsum() for p in self._players.values()])
 
 
 def first_setup():
@@ -570,6 +585,9 @@ class IRCClient:
 
     def chanmsg(self, text):
         self.send(f"PRIVMSG {conf['botchan']} :{text}")
+
+
+SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlspread', 'kind', 'name', 'flavor'])
 
 
 class DawdleBot(object):
@@ -908,7 +926,6 @@ class DawdleBot(object):
 
         self._players.write()
 
-    SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlspread', 'kind', 'name', 'flavor'])
 
     def find_item(self, player):
         # TODO: Convert to configuration
@@ -948,20 +965,21 @@ class DawdleBot(object):
         item = random.choice(Player.ITEMS)
         level = 0
         for num in range(1, int(player.level * 1.5)):
-            if random.randrange(1.4**(num / 4)) < 1:
+            if random.randrange(int(1.4**(num / 4))) < 1:
                 level = num
         old_level = int(getattr(player, item))
         if level > old_level:
             self._irc.notice(player.nick,
-                             f"You found a level {level} {item}! Your current {item} is only "
+                             f"You found a level {level} {Player.ITEMDESC[item]}! "
+                             f"Your current {Player.ITEMDESC[item]} is only "
                              f"level {old_level}, so it seems Luck is with you!")
             player.acquire_item(item, level)
             self._players.write()
         else:
             self._irc.notice(player.nick,
-                             f"You found a level {level} {item}. Your current {item} is "
-                             f"level {old_level}, so it seems Luck is against you.  You"
-                             f"toss the {item}.")
+                             f"You found a level {level} {Player.ITEMDESC[item]}. "
+                             f"Your current {Player.ITEMDESC[item]} is level {old_level}, "
+                             f"so it seems Luck is against you.  You toss the {Player.ITEMDESC[item]}.")
 
 
     def challenge_opp(self, player):
@@ -969,10 +987,9 @@ class DawdleBot(object):
         online = self._players.online_players()
         online.remove(player)
         if random.randrange(len(online)+1) < 1:
+            opp = None
             oppname = conf['botnick']
-            oppsum = 0
-            for p in self._players:
-                oppsum = max(p.battleitemsum()+1,oppsum)
+            oppsum = self._players.max_player_power()+1
         else:
             opp = random.choice(online)
             oppname = opp.name
@@ -986,8 +1003,8 @@ class DawdleBot(object):
                 gain = 7
             amount = int((gain / 100)*player.nextlvl)
             self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has challenged "
-                              f"{oppname} in combat and won! {duration(amount)} is "
-                              f"removed from {player.name}'s clock.")
+                              f"{oppname} [{opproll}/{oppsum}] in combat and won! "
+                              f"{duration(amount)} is removed from {player.name}'s clock.")
             player.nextlvl -= amount
             self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
             csfactor = 35
@@ -995,20 +1012,20 @@ class DawdleBot(object):
                 csfactor = 50
             elif player.alignment == 'e':
                 csfactor = 20
-            if random.randrange(csfactor) < 1 and oppname != conf['botnick']:
+            if random.randrange(csfactor) < 1 and opp is not None:
                 penalty = int(((5 + random.randrange(20))/100 * opp.nextlvl))
                 self._irc.chanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
                                   f"{duration(penalty)} is added to {opp.name}'s clock.")
                 opp.nextlvl += penalty
                 self._irc.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
-            elif random.randrange(25) < 1 and oppname != conf['botnick'] and player.level > 19:
+            elif random.randrange(25) < 1 and opp is not None and player.level > 19:
                 item = random.choice(Player.ITEMS)
                 playeritem = getattr(player, item)
                 oppitem = getattr(opp, item)
                 if oppitem > playeritem:
                     self._irc.chanmsg(f"In the fierce battle, {opp.name} dropped their level "
-                                      f"{oppitem} {item}! {player.name} picks it up, tossing "
-                                      f"their old level {playeritem} {item} to {opp.name}.")
+                                      f"{oppitem} {Player.ITEMDESC[item]}! {player.name} picks it up, tossing "
+                                      f"their old level {playeritem} {Player.ITEMDESC[item]} to {opp.name}.")
                     player.swap_item(opp, item)
         else:
             # Losing
