@@ -848,6 +848,21 @@ class DawdleBot(object):
                           f"in {duration(player.nextlvl)}.")
 
 
+    def cmd_trigger(self, player, nick, args):
+        """Trigger in-game events"""
+        if args == 'calamity':
+            self.calamity()
+        elif args == 'godsend':
+            self.godsend()
+        elif args == 'hog':
+            self.hand_of_god()
+        elif args == 'teambattle':
+            self.team_battle()
+        elif args == 'evilness':
+            self.evilness()
+        elif args == 'goodness':
+            self.goodness()
+
     def penalize(self, player, kind, text=None):
         penalty = PENALITIES[kind]
         if text:
@@ -874,7 +889,7 @@ class DawdleBot(object):
         online_players = self._players.online_players()
         online_count = 0
         evil_count = 0
-        good__count = 0
+        good_count = 0
         for player in online_players:
             online_count += 1
             if player.alignment == 'e':
@@ -889,9 +904,9 @@ class DawdleBot(object):
             self.calamity()
         if random.randrange(4 * 86400/conf['self_clock']) < online_count:
             self.godsend()
-        if random.randrange(8 * 86400/conf['self_clock']) < online_count:
+        if random.randrange(8 * 86400/conf['self_clock']) < evil_count:
             self.evilness()
-        if random.randrange(12 * 86400/conf['self_clock']) < online_count:
+        if random.randrange(12 * 86400/conf['self_clock']) < good_count:
             self.goodness()
 
         self.move_players()
@@ -1078,11 +1093,94 @@ class DawdleBot(object):
 
 
     def calamity(self):
-        pass
+        player = random.choice(self._players.online_players())
+        if not player:
+            return
+
+        if random.randrange(10) < 1:
+            # Item damaging calamity
+            item = random.choice(Player.ITEMS)
+            if item == "ring":
+                msg = f"{player.name} accidentally smashed their ring with a hammer!"
+            elif item == "amulet":
+                msg = f"{player.name} fell, chipping the stone in their amulet!"
+            elif item == "charm":
+                msg = f"{player.name} slipped and dropped their charm in a dirty bog!"
+            elif item == "weapon":
+                msg = f"{player.name} left their weapon out in the rain to rust!"
+            elif item == "helm":
+                msg = f"{player.name}'s helm was touched by a rust monster!"
+            elif item == "tunic":
+                msg = f"{player.name} spilled a level 7 shrinking potion on their tunic!"
+            elif item == "gloves":
+                msg = f"{player.name} dipped their gloved fingers in a pool of acid!"
+            elif item == "leggings":
+                msg = f"{player.name} burned a hole through their leggings while ironing them!"
+            elif item == "shield":
+                msg = f"{player.name}'s shield was damaged by a dragon's fiery breath!"
+            elif item == "boots":
+                msg = f"{player.name} stepped in some hot lava!"
+            self._irc.chanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} loses 10% of its effectiveness.")
+            setattr(player, item, int(getattr(player, item) * 0.9))
+            return
+
+        # Level setback calamity
+        amount = int((5 + random.randrange(8)) / 100 * player.nextlvl)
+        player.nextlvl += amount
+        # TODO: reading this file every time is silly
+        with open(conf['eventsfile']) as inf:
+            lines = [line.rstrip() for line in inf.readlines() if line.startswith("C ")]
+        action = random.choice(lines)[2:]
+        self._irc.chanmsg(f"{player.name} {action}! This terrible calamity has slowed them "
+                          f"{duration(amount)} from level {player.level + 1}.")
+        if player.nextlvl > 0:
+            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
     def godsend(self):
-        pass
+        player = random.choice(self._players.online_players())
+        if not player:
+            return
+
+        if random.randrange(10) < 1:
+            # Item improving godsend
+            item = random.choice(Player.ITEMS)
+            if item == "ring":
+                msg = f"{player.name} dipped their ring into a sacred fountain!"
+            elif item == "amulet":
+                msg = f"{player.name}'s amulet was blessed by a passing cleric!"
+            elif item == "charm":
+                msg = f"{player.name}'s charm ate a bolt of lightning!"
+            elif item == "weapon":
+                msg = f"{player.name} sharpened the edge of their weapon!"
+            elif item == "helm":
+                msg = f"{player.name} polished their helm to a mirror shine."
+            elif item == "tunic":
+                msg = f"A magician cast a spell of Rigidity on {player.name}'s tunic!"
+            elif item == "gloves":
+                msg = f"{player.name} lined their gloves with a magical cloth!"
+            elif item == "leggings":
+                msg = f"The local wizard imbued {player.name}'s pants with a Spirit of Fortitude!"
+            elif item == "shield":
+                msg = f"{player.name} reinforced their shield with a dragon's scale!"
+            elif item == "boots":
+                msg = f"A sorceror enchanted {player.name}'s boots with Swiftness!"
+
+            self._irc.chanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} gains 10% effectiveness.")
+            setattr(player, item, int(getattr(player, item) * 1.1))
+            return
+
+        # Level godsend
+        amount = int((5 + random.randrange(8)) / 100 * player.nextlvl)
+        player.nextlvl -= amount
+        # TODO: reading this file every time is silly
+        with open(conf['eventsfile']) as inf:
+            lines = [line.rstrip() for line in inf.readlines() if line.startswith("G ")]
+        action = random.choice(lines)[2:]
+        self._irc.chanmsg(f"{player.name} {action}! This wondrous godsend has accelerated them "
+                          f"{duration(amount)} towards level {player.level + 1}.")
+        if player.nextlvl > 0:
+            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
     def evilness(self):
