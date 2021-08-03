@@ -1054,7 +1054,27 @@ class DawdleBot(object):
 
 
     def team_battle(self):
-        pass
+        op = self._players.online_players()
+        if len(op) < 6:
+            return
+        op = random.shuffle(op)
+        team_a = sum([p.battleitemsum() for p in op[0:3]])
+        team_b = sum([p.battleitemsum() for p in op[3:6]])
+        gain = min([p.nextlvl for p in op[0:6]]) * 0.2
+        roll_a = random.randrange(team_a)
+        roll_b = random.randrange(team_b)
+        if roll_a >= roll_b:
+            self._irc.chanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
+                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name}"
+                              f"[{roll_b}/{team_b}] and won!  {duration(gain)} is removed from their clocks.")
+            for p in op[0:3]:
+                p.nextlvl -= gain
+        else:
+            self._irc.chanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
+                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name}"
+                              f"[{roll_b}/{team_b}] and lost!  {duration(gain)} is added to their clocks.")
+            for p in op[0:3]:
+                p.nextlvl += gain
 
 
     def calamity(self):

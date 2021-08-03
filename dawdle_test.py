@@ -28,10 +28,10 @@ class TestPlayerDB(unittest.TestCase):
             self.assertFalse(db.exists())
             db.create()
             p = db.new_player('foo', 'bar', 'baz')
-            self.assertTrue(db.check_login('foo', 'bar'))
-            self.assertFalse(db.check_login('foo', 'arb'))
-            p.set_password('arb')
-            self.assertTrue(db.check_login('foo', 'arb'))
+            self.assertTrue(db.check_login('foo', 'baz'))
+            self.assertFalse(db.check_login('foo', 'azb'))
+            p.set_password('azb')
+            self.assertTrue(db.check_login('foo', 'azb'))
             db.close()
 
 
