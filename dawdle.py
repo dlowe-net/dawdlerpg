@@ -27,6 +27,8 @@ import sqlite3
 import sys
 import time
 
+from hmac import compare_digest as compare_hash
+
 log = logging.getLogger()
 
 VERSION = "1.0.0"
@@ -323,7 +325,7 @@ class PlayerDB(object):
             cur.execute(f"create table players ({','.join(PlayerDB.FIELDS)})")
 
 
-    def new_player(self, pname, ppass, pclass):
+    def new_player(self, pname, pclass, ppass):
         global conf
 
         if pname in self._players:
@@ -358,9 +360,8 @@ class PlayerDB(object):
 
 
     def check_login(self, pname, ppass):
-        result = True
-        result = result and pname in self._players
-        result = result and crypt.crypt(ppass, self._players[pname].pw) == self._players[pname].pw
+        result = (pname in self._players)
+        result = result and compare_hash(self._players[pname].pw, crypt.crypt(ppass, self._players[pname].pw))
         return result
 
 
