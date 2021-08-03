@@ -711,7 +711,8 @@ class DawdleBot(object):
             self._irc.notice(nick, "Try: ALIGN good|neutral|evil")
             return
         player.alignment = args[0]
-        _players.write()
+        self._irc.notice(nick, f"You have converted to {args}")
+        self._players.write()
 
 
     def cmd_help(self, player, nick, args):
@@ -1184,11 +1185,49 @@ class DawdleBot(object):
 
 
     def evilness(self):
-        pass
-
+        op = self._players.online_players()
+        evil_p = [p for p in op if p.alignment == 'e']
+        if not evil_p:
+            return
+        player = random.choice(evil_p)
+        if random.randrange(2) < 1:
+            target = random.choice([p for p in op if p.alignment == 'g'])
+            if not target:
+                return
+            item = random.choice(Player.ITEMS)
+            if getattr(player, item) > getattr(target, item):
+                player.swap_item(target, item)
+                self._irc.chanmsg(f"{player.name} stole {target.name}'s level {getattr(player, item)} "
+                                  f"{Player.ITEMDESC[item]} while they were sleeping!  {player.name} "
+                                  f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
+                                  f"behind, which {target.name} then takes.")
+            else:
+                self._irc.notice(f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
+                                 f"but realized it was lower level than your own.  You creep "
+                                 f"back into the shadows.")
+        else:
+            amount = int(player.nextlvl * random.randrange(1,6) / 100)
+            player.nextlvl += amount
+            self._irc.chanmsg(f"{player.name} is forsaken by their evil god. {duration(amount)} is "
+                              f"added to their clock.")
+            if player.nextlvl > 0:
+                self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
     def goodness(self):
-        pass
+        op = self._players.online_players()
+        good_p = [p for p in op if p.alignment == 'g']
+        if len(good_p) < 2:
+            return
+        players = random.shuffle(good_p)[:2]
+        gain = random.randrange(5, 13)
+        self._irc.chanmsg(f"{players[0].name} and {players[1].name} have not let the iniquities "
+                          f"of evil people poison them. Together have they prayed to their god, "
+                          f"and light now shines down upon them. {gain}% of their time is removed "
+                          f"from their clocks.")
+        for player in players:
+            player.nextlvl = int(player.nextlvl * (1 - gain / 100))
+            if player.nextlvl > 0:
+                self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
     def move_players(self):
