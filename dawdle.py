@@ -965,7 +965,7 @@ class DawdleBot(object):
         if random.randrange(20 * day_ticks) < online_count:
             self.hand_of_god()
         if random.randrange(24 * day_ticks) < online_count:
-            self.team_battle()
+            self.team_battle(op)
         if random.randrange(8 * day_ticks) < online_count:
             self.calamity()
         if random.randrange(4 * day_ticks) < online_count:
@@ -1141,25 +1141,25 @@ class DawdleBot(object):
         self.pvp_battle(player, random.choice(op), 'challenged', 'and won', 'and lost')
 
 
-    def team_battle(self):
-        op = self._players.online()
+    def team_battle(self, op, force_order=False, force_win=False, force_loss=False):
         if len(op) < 6:
             return
-        op = random.shuffle(op)
+        if not force_order:
+            op = random.sample(op, 6)
         team_a = sum([p.battleitemsum() for p in op[0:3]])
         team_b = sum([p.battleitemsum() for p in op[3:6]])
         gain = min([p.nextlvl for p in op[0:6]]) * 0.2
         roll_a = random.randrange(team_a)
         roll_b = random.randrange(team_b)
-        if roll_a >= roll_b:
+        if force_win or (not force_loss and roll_a >= roll_b):
             self._irc.chanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
-                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name}"
+                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
                               f"[{roll_b}/{team_b}] and won!  {duration(gain)} is removed from their clocks.")
             for p in op[0:3]:
                 p.nextlvl -= gain
         else:
             self._irc.chanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
-                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name}"
+                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
                               f"[{roll_b}/{team_b}] and lost!  {duration(gain)} is added to their clocks.")
             for p in op[0:3]:
                 p.nextlvl += gain

@@ -2,6 +2,7 @@
 
 import dawdle
 import os.path
+import random
 import sys
 import tempfile
 import unittest
@@ -69,6 +70,55 @@ class TestIRCMessage(unittest.TestCase):
     def test_bad_encoding(self):
         line = "\255\035"
         msg = dawdle.IRCClient.parse_message(None, line)
+
+
+class FakeIRCClient(object):
+    def __init__(self):
+        self.chanmsgs = []
+        self.notices = {}
+
+    def chanmsg(self, text):
+        self.chanmsgs.append(text)
+
+    def notice(self, nick, text):
+        self.notices[nick] = self.notices.get(nick, []).append(text)
+
+class TestTeamBattle(unittest.TestCase):
+
+
+    def setUp(self):
+        self.bot = dawdle.DawdleBot(None)
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+
+    def test_setup_insufficient_players(self):
+        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcde"]
+        self.bot.team_battle(op)
+        self.assertEqual(self.irc.chanmsgs, [])
+
+
+    def test_win(self):
+        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcdef"]
+        op[0].amulet, op[0].nextlvl = 20, 1200
+        op[1].amulet, op[1].nextlvl = 20, 3600
+        op[2].amulet, op[2].nextlvl = 20, 3600
+        op[3].amulet, op[3].nextlvl = 40, 3600
+        op[4].amulet, op[4].nextlvl = 40, 3600
+        op[5].amulet, op[5].nextlvl = 40, 3600
+        self.bot.team_battle(op, force_order=True, force_win=True)
+        self.assertRegex(self.irc.chanmsgs[0], r"^a, b, and c \[\d+/60] have team battled d, e, and f \[\d+/120] and won!  0 days, 00:04:00 is removed from their clocks.")
+
+    def test_loss(self):
+        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcdef"]
+        op[0].amulet, op[0].nextlvl = 20, 1200
+        op[1].amulet, op[1].nextlvl = 20, 3600
+        op[2].amulet, op[2].nextlvl = 20, 3600
+        op[3].amulet, op[3].nextlvl = 40, 3600
+        op[4].amulet, op[4].nextlvl = 40, 3600
+        op[5].amulet, op[5].nextlvl = 40, 3600
+        self.bot.team_battle(op, force_order=True, force_loss=True)
+        self.assertRegex(self.irc.chanmsgs[0], r"^a, b, and c \[\d+/60] have team battled d, e, and f \[\d+/120] and lost!  0 days, 00:04:00 is added to their clocks.")
 
 
 if __name__ == "__main__":
