@@ -1085,17 +1085,19 @@ class DawdleBot(object):
                     self.challenge_opp(player)
 
 
-    def hand_of_god(self):
-        player = random.choice(self._players.online())
-        amount = int(player.nextlvl * (5 + random.randrange(71))/100)
-        if random.randrange(5) > 0:
+    def hand_of_god(self, op, force_forward=False, force_back=False, force_amount=None):
+        player = random.choice(op)
+        if force_amount is None:
+            amount = int(player.nextlvl * (5 + random.randrange(71))/100)
+        else:
+            amount = force_amount
+        if force_forward or (not force_back and random.randrange(5) > 0):
             self._irc.chanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {player.name} {duration(amount)} toward level {player.level + 1}.")
             player.nextlvl -= amount
         else:
             self._irc.chanmsg(f"Thereupon He stretched out His little finger among them and consumed {player.name} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
             player.nextlvl += amount
         self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
-
         self._players.write()
 
 

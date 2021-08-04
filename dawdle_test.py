@@ -83,10 +83,19 @@ class FakeIRCClient(object):
     def notice(self, nick, text):
         self.notices[nick] = self.notices.get(nick, []).append(text)
 
+class FakePlayerDB(object):
+    def __init__(self):
+        pass
+
+
+    def write(self):
+        pass
+
 class TestTeamBattle(unittest.TestCase):
 
 
     def setUp(self):
+        dawdle.conf['rpbase'] = 600
         self.bot = dawdle.DawdleBot(None)
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -119,6 +128,29 @@ class TestTeamBattle(unittest.TestCase):
         op[5].amulet, op[5].nextlvl = 40, 3600
         self.bot.team_battle(op, force_order=True, force_loss=True)
         self.assertRegex(self.irc.chanmsgs[0], r"^a, b, and c \[\d+/60] have team battled d, e, and f \[\d+/120] and lost!  0 days, 00:04:00 is added to their clocks.")
+
+class TestHandOfGod(unittest.TestCase):
+
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+
+    def test_forward(self):
+        op = [dawdle.Player.new_player('a', 'b', 'c')]
+        self.bot.hand_of_god(op, force_forward=True, force_amount=300)
+        self.assertEqual(self.irc.chanmsgs[0], "Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried a 0 days, 00:05:00 toward level 1.")
+        self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:05:00.")
+
+
+    def test_back(self):
+        op = [dawdle.Player.new_player('a', 'b', 'c')]
+        self.bot.hand_of_god(op, force_back=True, force_amount=300)
+        self.assertEqual(self.irc.chanmsgs[0], "Thereupon He stretched out His little finger among them and consumed a with fire, slowing the heathen 0 days, 00:05:00 from level 1.")
+        self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:15:00.")
 
 
 if __name__ == "__main__":
