@@ -177,7 +177,7 @@ class Player(object):
         # name of character class - affects nothing
         p.cclass = pclass
         # hashed password
-        p.pw = crypt.crypt(ppass, crypt.mksalt())
+        p.set_password(ppass)
         # admin bit
         p.isadmin = False
         # level
@@ -841,6 +841,92 @@ class DawdleBot(object):
         self.penalty(player, "logout")
 
 
+    def cmd_backup(self, player, nick, args):
+        """Copy database file to a backup directory."""
+        pass
+
+
+    def cmd_chclass(self, player, nick, args):
+        """Change another player's character class."""
+        pass
+
+
+    def cmd_chpass(self, player, nick, args):
+        """Change another player's password."""
+        pass
+
+
+    def cmd_chuser(self, player, nick, args):
+        """Change someone's username."""
+        pass
+
+
+    def cmd_clearq(self, player, nick, args):
+        """Clear outgoing message queue."""
+        # We don't have one, but we should.
+        pass
+
+
+    def cmd_del(self, player, nick, args):
+        """Delete another player's account."""
+        pass
+
+
+    def cmd_deladmin(self, player, nick, args):
+        """Remove admin authority."""
+        pass
+
+
+    def cmd_delold(self, player, nick, args):
+        """Remove players not accessed in a number of days."""
+        pass
+
+
+    def cmd_die(self, player, nick, args):
+        """Shut down the bot."""
+        pass
+
+
+    def cmd_info(self, player, nick, args):
+        """Info on bot internals."""
+        pass
+
+
+    def cmd_jump(self, player, nick, args):
+        """Switch to new IRC server."""
+        pass
+
+
+    def cmd_mkadmin(self, player, nick, args):
+        """Grant admin authority to player."""
+        pass
+
+
+    def cmd_pause(self, player, nick, args):
+        """Toggle pause mode."""
+        pass
+
+
+    def cmd_rehash(self, player, nick, args):
+        """Re-read configuration file."""
+        pass
+
+
+    def cmd_reloaddb(self, player, nick, args):
+        """Reload the player database."""
+        pass
+
+
+    def cmd_restart(self, player, nick, args):
+        """Restart from scratch."""
+        pass
+
+
+    def cmd_silent(self, player, nick, args):
+        """Set silent mode."""
+        pass
+
+
     def cmd_hog(self, player, nick, args):
         self.hand_of_god()
 
@@ -994,7 +1080,7 @@ class DawdleBot(object):
 
                 self._irc.chanmsg(f"{player.name}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
-                # Players below level 25 have less battles.
+                # Players below level 25 have fewer battles.
                 if player.level >= 25 or random.randrange(4) < 1:
                     self.challenge_opp(player)
 
@@ -1290,7 +1376,7 @@ class DawdleBot(object):
         good_p = [p for p in op if p.alignment == 'g']
         if len(good_p) < 2:
             return
-        players = random.shuffle(good_p)[:2]
+        players = random.sample(good_p, 2)
         gain = random.randrange(5, 13)
         self._irc.chanmsg(f"{players[0].name} and {players[1].name} have not let the iniquities "
                           f"of evil people poison them. Together have they prayed to their god, "
@@ -1392,7 +1478,7 @@ class DawdleBot(object):
         qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
         if len(qp) < 4:
             return
-        qp = random.shuffle(qp)[:4]
+        qp = random.sample(qp, 4)
         # TODO: reading this file every time is silly
         with open(conf['eventsfile']) as inf:
             lines = [line.rstrip() for line in inf.readlines() if line.startswith("Q")]
