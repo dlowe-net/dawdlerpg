@@ -357,6 +357,15 @@ class PlayerDB(object):
         return p
 
 
+    def rename_player(self, old_name, new_name):
+        self._players[new_name] = self._players[old_name]
+        self._players[new_name].name = new_name
+        del self._players[old_name]
+        with self._connect() as cur:
+            cur.execute("update players set name = ? where name = ?", (new_name, old_name))
+            cur.commit()
+
+
     def delete_player(self, pname):
         del self._players[pname]
         with self._connect() as cur:
@@ -889,17 +898,38 @@ class DawdleBot(object):
 
     def cmd_chclass(self, player, nick, args):
         """Change another player's character class."""
-        pass
+        parts = args.split(' ', 1)
+        if len(parts) != 2:
+            self._irc.notice(nick, "Try: CHCLASS <account> <new class>")
+        elif parts[0] not in self._players:
+            self._irc.notice(nick, f"{parts[0]} is not a valid account.")
+        else:
+            self._players[parts[0]].cclass = parts[1]
+            self._irc.notice(nick, f"{parts[0]}'s character class is now '{parts[1]}'.")
 
 
     def cmd_chpass(self, player, nick, args):
         """Change another player's password."""
-        pass
+        parts = args.split(' ', 1)
+        if len(parts) != 2:
+            self._irc.notice(nick, "Try: CHPASS <account> <new password>")
+        elif parts[0] not in self._players:
+            self._irc.notice(nick, f"{parts[0]} is not a valid account.")
+        else:
+            self._players[parts[0]].set_password(parts[1])
+            self._irc.notice(nick, f"{parts[0]}'s password changed.")
 
 
     def cmd_chuser(self, player, nick, args):
         """Change someone's username."""
-        pass
+        parts = args.split(' ', 1)
+        if len(parts) != 2:
+            self._irc.notice(nick, "Try: CHPASS <account> <new account name>")
+        elif parts[0] not in self._players:
+            self._irc.notice(nick, f"{parts[0]} is not a valid account.")
+        else:
+            self._players.rename_player(parts[0], parts[1])
+            self._irc.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
 
 
     def cmd_clearq(self, player, nick, args):
@@ -910,12 +940,25 @@ class DawdleBot(object):
 
     def cmd_del(self, player, nick, args):
         """Delete another player's account."""
-        pass
+        if args not in self._players:
+            self._irc.notice(nick, f"{args} is not a valid account.")
+        else:
+            self._players.delete_player(args)
+            self._irc.notice(nick, f"{args} has been deleted.")
 
 
     def cmd_deladmin(self, player, nick, args):
         """Remove admin authority."""
-        pass
+        if args not in self._players:
+            self._irc.notice(nick, f"{args} is not a valid account.")
+        elif not self._players[args].isadmin:
+            self._irc.notice(nick, f"{args} is already not an admin.")
+        elif args == conf['owner']:
+            self._irc.notice(nick, f"You can't do that.")
+        else:
+            self._players[args].isadmin = False
+            self._db.write()
+            self._irc.notice(nick, f"{args} is no longer an admin.")
 
 
     def cmd_delold(self, player, nick, args):
@@ -925,7 +968,8 @@ class DawdleBot(object):
 
     def cmd_die(self, player, nick, args):
         """Shut down the bot."""
-        pass
+        self._irc.notice(nick, "Shutting down.")
+        sys.exit(0)
 
 
     def cmd_info(self, player, nick, args):
@@ -940,12 +984,23 @@ class DawdleBot(object):
 
     def cmd_mkadmin(self, player, nick, args):
         """Grant admin authority to player."""
-        pass
+        if args not in self._players:
+            self._irc.notice(nick, f"{args} is not a valid account.")
+        elif self._players[args].isadmin:
+            self._irc.notice(nick, f"{args} is already an admin.")
+        else:
+            self._players[args].isadmin = True
+            self._db.write()
+            self._irc.notice(nick, f"{args} is now an admin.")
 
 
     def cmd_pause(self, player, nick, args):
         """Toggle pause mode."""
-        pass
+        pause_mode = not pause_mode
+        if pause_mode:
+            self._irc.notice(nick, "Pause mode enabled.")
+        else:
+            self._irc.notice(nick, "Pause mode disabled.")
 
 
     def cmd_rehash(self, player, nick, args):
@@ -955,7 +1010,7 @@ class DawdleBot(object):
 
     def cmd_reloaddb(self, player, nick, args):
         """Reload the player database."""
-        pass
+        self._db.load()
 
 
     def cmd_restart(self, player, nick, args):
@@ -965,11 +1020,15 @@ class DawdleBot(object):
 
     def cmd_silent(self, player, nick, args):
         """Set silent mode."""
-        pass
+        silent_mode = not silent_mode
+        if silent_mode:
+            self._irc.notice(nick, "Silent mode enabled.")
+        else:
+            self._irc.notice(nick, "Silent mode disabled.")
 
 
     def cmd_hog(self, player, nick, args):
-        self.hand_of_god()
+        self.hand_of_god(self._players.online())
 
 
     def cmd_push(self, player, nick, args):
