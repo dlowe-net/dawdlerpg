@@ -1001,7 +1001,7 @@ class DawdleBot(object):
         elif args == 'teambattle':
             self.team_battle()
         elif args == 'evilness':
-            self.evilness()
+            self.evilness(self._players.online())
         elif args == 'goodness':
             self.goodness()
         elif args == 'battle':
@@ -1089,7 +1089,7 @@ class DawdleBot(object):
         if self.randint('godsend_trigger', 4 * day_ticks) < online_count:
             self.godsend()
         if self.randint('evilness_trigger', 8 * day_ticks) < evil_count:
-            self.evilness()
+            self.evilness(op)
         if self.randint('goodness_trigger', 12 * day_ticks) < good_count:
             self.goodness()
 
@@ -1362,8 +1362,7 @@ class DawdleBot(object):
             self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
-    def evilness(self):
-        op = self._players.online()
+    def evilness(self, op):
         evil_p = [p for p in op if p.alignment == 'e']
         if not evil_p:
             return
@@ -1373,14 +1372,15 @@ class DawdleBot(object):
             if not target:
                 return
             item = self.randchoice('evilness_item', Player.ITEMS)
-            if getattr(player, item) > getattr(target, item):
+            if getattr(player, item) < getattr(target, item):
                 player.swap_items(target, item)
                 self._irc.chanmsg(f"{player.name} stole {target.name}'s level {getattr(player, item)} "
                                   f"{Player.ITEMDESC[item]} while they were sleeping!  {player.name} "
                                   f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
                                   f"behind, which {target.name} then takes.")
             else:
-                self._irc.notice(f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
+                self._irc.notice(player,
+                                 f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
                                  f"but realized it was lower level than your own.  You creep "
                                  f"back into the shadows.")
         else:

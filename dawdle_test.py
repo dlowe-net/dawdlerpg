@@ -291,6 +291,40 @@ class TestTeamBattle(unittest.TestCase):
         self.assertEqual(self.irc.chanmsgs[0], "a, b, and c [30/60] have team battled d, e, and f [60/120] and lost!  0 days, 00:04:00 is added to their clocks.")
 
 
+class TestEvilness(unittest.TestCase):
+
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+
+    def test_theft(self):
+        op = [dawdle.Player.new_player('a', 'b', 'c'), dawdle.Player.new_player('b', 'c', 'd')]
+        op[0].alignment = 'e'
+        op[1].alignment = 'g'
+        op[1].amulet = 20
+        self.bot._overrides = {
+            'evilness_theft': True,
+            'evilness_item': 'amulet'
+        }
+        self.bot.evilness(op)
+        self.assertEqual(self.irc.chanmsgs[0], "a stole b's level 20 amulet while they were sleeping!  a leaves their old level 0 amulet behind, which b then takes.")
+
+
+    def test_penalty(self):
+        op = [dawdle.Player.new_player('a', 'b', 'c')]
+        op[0].alignment = 'e'
+        self.bot._overrides = {
+            'evilness_theft': False,
+            'evilness_penalty_pct': 5
+        }
+        self.bot.evilness(op)
+        self.assertEqual(self.irc.chanmsgs[0], "a is forsaken by their evil god. 0 days, 00:00:30 is added to their clock.")
+
+
 class TestHandOfGod(unittest.TestCase):
 
 
