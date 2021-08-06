@@ -115,8 +115,13 @@ class TestTeamBattle(unittest.TestCase):
         op[3].amulet, op[3].nextlvl = 40, 3600
         op[4].amulet, op[4].nextlvl = 40, 3600
         op[5].amulet, op[5].nextlvl = 40, 3600
-        self.bot.team_battle(op, force_order=True, force_win=True)
-        self.assertRegex(self.irc.chanmsgs[0], r"^a, b, and c \[\d+/60] have team battled d, e, and f \[\d+/120] and won!  0 days, 00:04:00 is removed from their clocks.")
+        self.bot._overrides = {
+            'team_battle_members': op,
+            'team_a_roll': 60,
+            'team_b_roll': 30
+        }
+        self.bot.team_battle(op)
+        self.assertEqual(self.irc.chanmsgs[0], "a, b, and c [60/60] have team battled d, e, and f [30/120] and won!  0 days, 00:04:00 is removed from their clocks.")
 
     def test_loss(self):
         op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcdef"]
@@ -126,9 +131,15 @@ class TestTeamBattle(unittest.TestCase):
         op[3].amulet, op[3].nextlvl = 40, 3600
         op[4].amulet, op[4].nextlvl = 40, 3600
         op[5].amulet, op[5].nextlvl = 40, 3600
-        self.bot.team_battle(op, force_order=True, force_loss=True)
-        self.assertRegex(self.irc.chanmsgs[0], r"^a, b, and c \[\d+/60] have team battled d, e, and f \[\d+/120] and lost!  0 days, 00:04:00 is added to their clocks.")
+        self.bot._overrides = {
+            'team_battle_members': op,
+            'team_a_roll': 30,
+            'team_b_roll': 60
+        }
+        self.bot.team_battle(op)
+        self.assertEqual(self.irc.chanmsgs[0], "a, b, and c [30/60] have team battled d, e, and f [60/120] and lost!  0 days, 00:04:00 is added to their clocks.")
 
+        
 class TestHandOfGod(unittest.TestCase):
 
 
@@ -141,16 +152,24 @@ class TestHandOfGod(unittest.TestCase):
 
     def test_forward(self):
         op = [dawdle.Player.new_player('a', 'b', 'c')]
-        self.bot.hand_of_god(op, force_forward=True, force_amount=300)
-        self.assertEqual(self.irc.chanmsgs[0], "Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried a 0 days, 00:05:00 toward level 1.")
-        self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:05:00.")
+        self.bot._overrides = {
+            'hog_effect': True,
+            'hog_amount': 10
+        }
+        self.bot.hand_of_god(op)
+        self.assertEqual(self.irc.chanmsgs[0], "Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried a 0 days, 00:01:30 toward level 1.")
+        self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:08:30.")
 
 
     def test_back(self):
         op = [dawdle.Player.new_player('a', 'b', 'c')]
-        self.bot.hand_of_god(op, force_back=True, force_amount=300)
-        self.assertEqual(self.irc.chanmsgs[0], "Thereupon He stretched out His little finger among them and consumed a with fire, slowing the heathen 0 days, 00:05:00 from level 1.")
-        self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:15:00.")
+        self.bot._overrides = {
+            'hog_effect': False,
+            'hog_amount': 10
+        }
+        self.bot.hand_of_god(op)
+        self.assertEqual(self.irc.chanmsgs[0], "Thereupon He stretched out His little finger among them and consumed a with fire, slowing the heathen 0 days, 00:01:30 from level 1.")
+        self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:11:30.")
 
 
 if __name__ == "__main__":
