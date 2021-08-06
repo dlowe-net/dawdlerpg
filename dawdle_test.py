@@ -325,6 +325,34 @@ class TestEvilness(unittest.TestCase):
         self.assertEqual(self.irc.chanmsgs[0], "a is forsaken by their evil god. 0 days, 00:00:30 is added to their clock.")
 
 
+class TestGoodness(unittest.TestCase):
+
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+
+    def test_goodness(self):
+        op = [dawdle.Player.new_player('a', 'b', 'c'), dawdle.Player.new_player('b', 'c', 'd')]
+        op[0].alignment = 'g'
+        op[1].alignment = 'g'
+        self.bot._overrides = {
+            'goodness_players': op,
+            'goodness_gain_pct': 10,
+        }
+        self.bot.goodness(op)
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a and b have not let the iniquities of evil people poison them. Together have they prayed to their god, and light now shines down upon them. 10% of their time is removed from their clocks.",
+            "a reaches next level in 0 days, 00:09:00.",
+            "b reaches next level in 0 days, 00:09:00."
+        ])
+        self.assertEqual(op[0].nextlvl, 540)
+        self.assertEqual(op[1].nextlvl, 540)
+
+
 class TestHandOfGod(unittest.TestCase):
 
 

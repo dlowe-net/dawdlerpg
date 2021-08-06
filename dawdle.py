@@ -1003,7 +1003,7 @@ class DawdleBot(object):
         elif args == 'evilness':
             self.evilness(self._players.online())
         elif args == 'goodness':
-            self.goodness()
+            self.goodness(self._players.online())
         elif args == 'battle':
             self.challenge_opp(player)
 
@@ -1091,7 +1091,7 @@ class DawdleBot(object):
         if self.randint('evilness_trigger', 8 * day_ticks) < evil_count:
             self.evilness(op)
         if self.randint('goodness_trigger', 12 * day_ticks) < good_count:
-            self.goodness()
+            self.goodness(op)
 
         self.move_players()
         self.quest_check()
@@ -1391,8 +1391,7 @@ class DawdleBot(object):
             if player.nextlvl > 0:
                 self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
-    def goodness(self):
-        op = self._players.online()
+    def goodness(self, op):
         good_p = [p for p in op if p.alignment == 'g']
         if len(good_p) < 2:
             return
