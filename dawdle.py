@@ -588,7 +588,16 @@ class IRCClient:
 
 
 SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlspread', 'kind', 'name', 'flavor'])
-Quest = collections.namedtuple('Quest', ['questors', 'mode', 'text', 'qtime', 'p1', 'p2', 'stage'])
+
+
+class Quest(object):
+    def __init__(self, qp):
+        self.questors = qp
+        self.mode = None
+        self.text = None
+        self.qtime = None
+        self.dests = []
+
 
 class DawdleBot(object):
     # Commands in ALLOWALL can be used by anyone.
@@ -1030,27 +1039,29 @@ class DawdleBot(object):
 
 
     def penalize(self, player, kind, text=None):
-        if self._quest:
-            if player in self._quest.questors:
-                self._irc.chanmsg(player.name + "'s cowardice has brought the wrath of the gods "
-                                  "down upon them.  All their great wickedness makes "
-                                  "them heavy with lead, and to tend downwards with "
-                                  "great weight and pressure towards hell. Therefore "
-                                  "have they drawn themself 30 steps closer to that "
-                                  "gaping maw.")
-                gain = int(30 * (conf['rppenstep'] ** player.level))
-                player.penquest += gain
-                player.nextlvl += gain
-                self._quest = None
-                self._qtimer = time.time() + 12 * 3600
+        if self._quest and player in self._quest.questors:
+            self._irc.chanmsg(player.name + "'s cowardice has brought the wrath of the gods "
+                              "down upon them.  All their great wickedness makes "
+                              "them heavy with lead, and to tend downwards with "
+                              "great weight and pressure towards hell. Therefore "
+                              "have they drawn themselves 15 steps closer to that "
+                              "gaping maw.")
+            for p in self._players.online():
+                gain = int(15 * (conf['rppenstep'] ** p.level))
+                p.penquest += gain
+                p.nextlvl += gain
 
-        penalty = PENALITIES[kind]
+            self._quest = None
+            self._qtimer = time.time() + 12 * 3600
+
+        penalty = PENALTIES[kind]
         if text:
             penalty *= len(text)
-        penality *= conf['rppenstep'] ** player.level
+        penalty *= int(conf['rppenstep'] ** player.level)
         if 'limitpen' in conf and penalty > conf['limitpen']:
             penalty = conf['limitpen']
         setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
+        player.nextlvl += penalty
         if kind != 'quit':
             self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
 
@@ -1455,10 +1466,10 @@ class DawdleBot(object):
 
     def quest_check(self):
         if self._quest is None:
-            if time.time() <= self._qtimer:
+            if time.time() >= self._qtimer:
                 self.quest_start()
         elif self._quest.mode == 1:
-            if time.time() <= self._quest.qtime:
+            if time.time() >= self._quest.qtime:
                 qp = self._quest.questors
                 self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                                   f"have blessed the realm by completing their quest! 25% of "
@@ -1466,7 +1477,7 @@ class DawdleBot(object):
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
                 self._quest = None
-                self._qtimer = time() + 6*3600
+                self._qtimer = time.time() + 6*3600
         elif self._quest.mode == 2:
             done = True
             for q in self._quest.questors:
@@ -1475,13 +1486,14 @@ class DawdleBot(object):
                     break
             if done:
                 self._quest.dest = self._quest.dest[1:]
+                qp = self._quest.questors
                 if len(self._quest.dest) > 0:
                     if len(self._quest.dest) == 1:
                         landmarks_remain = "1 landmark remains."
                     else:
                         landmarks_remain = f"{len(self._quest.dest)} landmarks remain."
                     self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                      f"have reached a landmark on their journey! {landmarks_remain} ")
+                                      f"have reached a landmark on their journey! {landmarks_remain}")
                 else:
                     self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                                       f"have completed their journey! 25% of "
@@ -1489,7 +1501,7 @@ class DawdleBot(object):
                     for q in qp:
                         q.nextlvl = int(q.nextlvl * 0.75)
                     self._quest = None
-                    self._qtimer = time() + 6*3600
+                    self._qtimer = time.time() + 6*3600
 
 
     def quest_start(self):
@@ -1506,28 +1518,26 @@ class DawdleBot(object):
                  re.match(r'^Q(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
         if not match:
             return
-        self._quest = Quest(questors=qp)
+        self._quest = Quest(qp)
         if match[1] == '1':
+            quest_time = self.randint('quest_time', 12, 24)*3600
             self._quest.mode = 1
             self._quest.text = match[2]
-            self._quest.qtime = time.time() + self.randint('quest_time', 12, 24)*3600
+            self._quest.qtime = time.time() + quest_time
+            self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+                              f"been chosen by the gods to {self._quest.text}.  Quest to end in "
+                              f"{duration(quest_time)}.")
         elif match[1] == '2':
             self._quest.mode = 2
             self._quest.dest = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
-            self._quest.text = match[5]
-
-        if self._quest.mode == 1:
-            self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
-                              f"been chosen by the gods to {self._quest.text}.  Quest to end in "
-                              f"{duration(self._quest.qtime - time.time())}.")
-        elif self._quest.mode == 2:
+            self._quest.text = match[6]
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
             self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
                               f"been chosen by the gods to {self._quest.text}.  Participants must first "
-                              f"reach ({self._quest.dest[0][0]},{self._quest.dest[0][0]}), "
-                              f"then ({self._quest.dest[1][0]},{self._quest.dest[1][0]}).{mapnotice}")
+                              f"reach ({self._quest.dest[0][0]},{self._quest.dest[0][1]}), "
+                              f"then ({self._quest.dest[1][0]},{self._quest.dest[1][1]}).{mapnotice}")
 
 
 async def mainloop(client):

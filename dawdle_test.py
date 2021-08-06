@@ -5,6 +5,7 @@ import os.path
 import random
 import sys
 import tempfile
+import time
 import unittest
 
 class TestPlayerDB(unittest.TestCase):
@@ -90,6 +91,10 @@ class FakePlayerDB(object):
 
     def write(self):
         pass
+
+
+    def online(self):
+        return self._online
 
 
     def max_player_power(self):
@@ -383,6 +388,108 @@ class TestHandOfGod(unittest.TestCase):
         self.bot.hand_of_god(op)
         self.assertEqual(self.irc.chanmsgs[0], "Thereupon He stretched out His little finger among them and consumed a with fire, slowing the heathen 0 days, 00:01:30 from level 1.")
         self.assertEqual(self.irc.chanmsgs[1], "a reaches next level in 0 days, 00:11:30.")
+
+
+class TestQuest(unittest.TestCase):
+
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        dawdle.conf['eventsfile'] = "events.txt"
+        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+
+    def test_questing_mode_1(self):
+        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcd"]
+        now = time.time()
+        for p in op:
+            p.level = 25
+            p.lastlogin = now - 36001
+        self.bot._overrides = {
+            "quest_members": op,
+            "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
+            "quest_time": 12
+        }
+        self.bot._players._online = op
+        self.bot.quest_start()
+        # time passes
+        self.bot._quest.qtime = time.time() - 1
+        self.bot.quest_check()
+
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a, b, c, and d have been chosen by the gods to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu.  Quest to end in 0 days, 12:00:00.",
+            "a, b, c, and d have blessed the realm by completing their quest! 25% of their burden is eliminated."
+        ])
+        self.assertEqual(op[0].nextlvl, 450)
+        self.assertEqual(op[1].nextlvl, 450)
+        self.assertEqual(op[2].nextlvl, 450)
+        self.assertEqual(op[3].nextlvl, 450)
+
+
+    def test_questing_mode_2(self):
+        dawdle.conf['mapurl'] = "https://example.com/"
+        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcd"]
+        now = time.time()
+        for p in op:
+            p.level = 25
+            p.lastlogin = now - 36001
+        self.bot._overrides = {
+            "quest_members": op,
+            "quest_selection": "Q2 400 475 480 380 explore and chart the dark lands of T'rnalvph",
+        }
+        self.bot._players._online = op
+        self.bot.quest_start()
+        for p in op:
+            p.posx, p.posy = 400, 475
+        self.bot.quest_check()
+        for p in op:
+            p.posx, p.posy = 480, 380
+        self.bot.quest_check()
+
+        self.assertEqual(self.irc.chanmsgs, [
+            "a, b, c, and d have been chosen by the gods to explore and chart the dark lands of T'rnalvph.  Participants must first reach (400,475), then (480,380). See https://example.com/ to monitor their journey's progress.",
+            "a, b, c, and d have reached a landmark on their journey! 1 landmark remains.",
+            "a, b, c, and d have completed their journey! 25% of their burden is eliminated."
+        ])
+        self.assertEqual(op[0].nextlvl, 450)
+        self.assertEqual(op[1].nextlvl, 450)
+        self.assertEqual(op[2].nextlvl, 450)
+        self.assertEqual(op[3].nextlvl, 450)
+
+
+    def test_questing_failure(self):
+        dawdle.conf['rppenstep'] = 1.14
+        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcd"]
+        self.bot._players._online = op
+        now = time.time()
+        for p in op:
+            p.nick = p.name
+            p.level = 25
+            p.lastlogin = now - 36001
+        self.bot._overrides = {
+            "quest_members": op,
+            "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
+            "quest_time": 12
+        }
+        self.bot._players._online = op
+        self.bot.quest_start()
+        self.bot.penalize(op[0], 'logout')
+
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a, b, c, and d have been chosen by the gods to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu.  Quest to end in 0 days, 12:00:00.",
+            "a's cowardice has brought the wrath of the gods down upon them.  All their great wickedness makes them heavy with lead, and to tend downwards with great weight and pressure towards hell. Therefore have they drawn themselves 15 steps closer to that gaping maw."
+        ])
+        self.assertListEqual(self.irc.notices['a'],
+                             ["Penalty of 0 days, 00:08:40 added to your timer for LOGOUT command."])
+        self.assertEqual(op[0].nextlvl, 1516)
+        self.assertEqual(op[1].nextlvl, 996)
+        self.assertEqual(op[2].nextlvl, 996)
+        self.assertEqual(op[3].nextlvl, 996)
+
+
+
 
 
 if __name__ == "__main__":
