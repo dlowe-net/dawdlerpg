@@ -1167,9 +1167,13 @@ class DawdleBot(object):
 
         item = self.randchoice('find_item_itemtype', Player.ITEMS)
         level = 0
-        for num in range(1, int(player.level * 1.5)):
-            if self.randomly('find_item_level', int(1.4**(num / 4))):
-                level = num
+        if 'find_item_level' in self._overrides:
+            level = self._overrides['find_item_level']
+        else:
+            level = 0
+            for num in range(1, int(player.level * 1.5)):
+                if self.randomly('find_item_level_ok', int(1.4**(num / 4))):
+                    level = num
         old_level = int(getattr(player, item))
         if level > old_level:
             self._irc.notice(player.nick,
@@ -1196,9 +1200,7 @@ class DawdleBot(object):
         playerroll = self.randint('pvp_player_roll', 0, playersum)
         opproll = self.randint('pvp_opp_roll', 0, oppsum)
         if playerroll >= opproll:
-            gain = 20 if oppname == conf['botnick'] else int(opp.level / 4)
-            if gain < 7:
-                gain = 7
+            gain = 20 if opp is None else max(7, int(opp.level / 4))
             amount = int((gain / 100)*player.nextlvl)
             self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
                               f"{oppname} [{opproll}/{oppsum}] {flavor_win}! "
@@ -1214,7 +1216,7 @@ class DawdleBot(object):
                     opp.nextlvl += penalty
                     self._irc.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
                 elif player.level > 19 and self.randomly('pvp_swap_item', 25):
-                    item = random.choice(Player.ITEMS)
+                    item = self.randchoice('pvp_swap_itemtype', Player.ITEMS)
                     playeritem = getattr(player, item)
                     oppitem = getattr(opp, item)
                     if oppitem > playeritem:
@@ -1224,17 +1226,15 @@ class DawdleBot(object):
                         player.swap_items(opp, item)
         else:
             # Losing
-            loss = 10 if oppname == conf['botnick'] else int(opp.level / 7)
-            if loss < 7:
-                loss = 7
+            loss = 10 if opp is None else max(7, int(opp.level / 7))
             amount = int((loss / 100)*player.nextlvl)
             self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
-                              f"{oppname} {flavor_loss}! {duration(amount)} is "
+                              f"{oppname} [{opproll}/{oppsum}] {flavor_loss}! {duration(amount)} is "
                               f"added to {player.name}'s clock.")
             player.nextlvl += amount
             self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
-        if self.randomly('pvp_find_item', 0, {'g': 50, 'n': 67, 'e': 100}[player.alignment]):
+        if self.randomly('pvp_find_item', {'g': 50, 'n': 67, 'e': 100}[player.alignment]):
             self._irc.chanmsg(f"While recovering from battle, {player.name} notices a glint "
                               f"in the mud. Upon investigation, they find an old lost item!")
             self.find_item(player)
@@ -1560,7 +1560,6 @@ def start_bot():
     bot = DawdleBot(db)
     client = IRCClient(bot)
     asyncio.run(mainloop(client))
-
 
 if __name__ == "__main__":
     start_bot()

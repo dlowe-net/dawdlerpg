@@ -81,7 +81,7 @@ class FakeIRCClient(object):
         self.chanmsgs.append(text)
 
     def notice(self, nick, text):
-        self.notices[nick] = self.notices.get(nick, []).append(text)
+        self.notices.setdefault(nick, []).append(text)
 
 class FakePlayerDB(object):
     def __init__(self):
@@ -90,6 +90,157 @@ class FakePlayerDB(object):
 
     def write(self):
         pass
+
+
+    def max_player_power(self):
+        return 42
+
+class TestPvPBattle(unittest.TestCase):
+
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+
+    def test_player_battle_win(self):
+        a = dawdle.Player.new_player('a', 'b', 'c')
+        a.amulet = 20
+        b = dawdle.Player.new_player('b', 'c', 'd')
+        b.amulet = 40
+        self.bot._overrides = {
+            'pvp_player_roll': 20,
+            'pvp_opp_roll': 10,
+            'pvp_critical': False,
+            'pvp_swap_item': False,
+            'pvp_find_item': False
+        }
+        self.bot.pvp_battle(a, b, "fought", "and has won", "and has lost")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a [20/20] has fought b [10/40] and has won! 0 days, 00:00:42 is removed from a's clock.",
+            "a reaches next level in 0 days, 00:09:18."
+            ])
+        self.assertEqual(a.nextlvl, 558)
+
+
+    def test_player_battle_bot(self):
+        dawdle.conf['botnick'] = 'dawdlerpg'
+        a = dawdle.Player.new_player('a', 'b', 'c')
+        a.amulet = 20
+        self.bot._overrides = {
+            'pvp_player_roll': 20,
+            'pvp_opp_roll': 10,
+            'pvp_critical': False,
+            'pvp_swap_item': False,
+            'pvp_find_item': False
+        }
+        self.bot.pvp_battle(a, None, "fought", "and has won", "and has lost")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a [20/20] has fought dawdlerpg [10/43] and has won! 0 days, 00:02:00 is removed from a's clock.",
+            "a reaches next level in 0 days, 00:08:00."
+            ])
+        self.assertEqual(a.nextlvl, 480)
+
+
+    def test_player_battle_lose(self):
+        a = dawdle.Player.new_player('a', 'b', 'c')
+        a.amulet = 20
+        b = dawdle.Player.new_player('b', 'c', 'd')
+        b.amulet = 40
+        self.bot._overrides = {
+            'pvp_player_roll': 10,
+            'pvp_opp_roll': 20,
+            'pvp_critical': False,
+            'pvp_swap_item': False,
+            'pvp_find_item': False
+        }
+        self.bot.pvp_battle(a, b, "fought", "and has won", "and has lost")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a [10/20] has fought b [20/40] and has lost! 0 days, 00:00:42 is added to a's clock.",
+            "a reaches next level in 0 days, 00:10:42."
+            ])
+        self.assertEqual(a.nextlvl, 642)
+
+
+    def test_player_battle_critical(self):
+        a = dawdle.Player.new_player('a', 'b', 'c')
+        a.amulet = 20
+        b = dawdle.Player.new_player('b', 'c', 'd')
+        b.amulet = 40
+        self.bot._overrides = {
+            'pvp_player_roll': 20,
+            'pvp_opp_roll': 10,
+            'pvp_critical': True,
+            'pvp_cs_penalty_pct': 10,
+            'pvp_swap_item': False,
+            'pvp_find_item': False
+        }
+        self.bot.pvp_battle(a, b, "fought", "and has won", "and has lost")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a [20/20] has fought b [10/40] and has won! 0 days, 00:00:42 is removed from a's clock.",
+            "a reaches next level in 0 days, 00:09:18.",
+            "a has dealt b a Critical Strike! 0 days, 00:01:30 is added to b's clock.",
+            "b reaches next level in 0 days, 00:11:30."
+            ])
+        self.assertEqual(a.nextlvl, 558)
+        self.assertEqual(b.nextlvl, 690)
+
+
+    def test_player_battle_swapitem(self):
+        a = dawdle.Player.new_player('a', 'b', 'c')
+        a.level = 20
+        a.amulet = 20
+        b = dawdle.Player.new_player('b', 'c', 'd')
+        b.amulet = 40
+        self.bot._overrides = {
+            'pvp_player_roll': 20,
+            'pvp_opp_roll': 10,
+            'pvp_critical': False,
+            'pvp_swap_item': True,
+            'pvp_swap_itemtype': 'amulet',
+            'pvp_find_item': False
+        }
+        self.bot.pvp_battle(a, b, "fought", "and has won", "and has lost")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a [20/20] has fought b [10/40] and has won! 0 days, 00:00:42 is removed from a's clock.",
+            "a reaches next level in 0 days, 00:09:18.",
+            "In the fierce battle, b dropped their level 40 amulet! a picks it up, tossing their old level 20 amulet to b."
+            ])
+        self.assertEqual(a.nextlvl, 558)
+        self.assertEqual(a.amulet, 40)
+        self.assertEqual(b.amulet, 20)
+
+
+    def test_player_battle_finditem(self):
+        a = dawdle.Player.new_player('a', 'b', 'c')
+        a.nick = 'a'
+        a.amulet = 20
+        b = dawdle.Player.new_player('b', 'c', 'd')
+        b.amulet = 40
+        self.bot._overrides = {
+            'pvp_player_roll': 20,
+            'pvp_opp_roll': 10,
+            'pvp_critical': False,
+            'pvp_swap_item': False,
+            'pvp_find_item': True,
+            'specitem_find': False,
+            'find_item_itemtype': 'charm',
+            'find_item_level': 5
+        }
+        self.bot.pvp_battle(a, b, "fought", "and has won", "and has lost")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "a [20/20] has fought b [10/40] and has won! 0 days, 00:00:42 is removed from a's clock.",
+            "a reaches next level in 0 days, 00:09:18.",
+            "While recovering from battle, a notices a glint in the mud. Upon investigation, they find an old lost item!"
+            ])
+        self.assertListEqual(self.irc.notices['a'], [
+            "You found a level 5 charm! Your current charm is only level 0, so it seems Luck is with you!"
+            ])
+
+        self.assertEqual(a.nextlvl, 558)
+
 
 class TestTeamBattle(unittest.TestCase):
 
@@ -139,7 +290,7 @@ class TestTeamBattle(unittest.TestCase):
         self.bot.team_battle(op)
         self.assertEqual(self.irc.chanmsgs[0], "a, b, and c [30/60] have team battled d, e, and f [60/120] and lost!  0 days, 00:04:00 is added to their clocks.")
 
-        
+
 class TestHandOfGod(unittest.TestCase):
 
 
