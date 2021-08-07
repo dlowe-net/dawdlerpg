@@ -703,13 +703,13 @@ class DawdleBot(object):
     def channel_message(self, src, text):
         player = self._players.from_nick(src)
         if player:
-            self.penalty(player, "message")
+            self.penalize(player, "message", text)
 
 
     def channel_notice(self, src, text):
         player = self._players.from_nick(src)
         if player:
-            self.penalty(player, "message")
+            self.penalize(player, "message", text)
 
 
     def self_joined(self, src):
@@ -723,7 +723,7 @@ class DawdleBot(object):
         player = self._players.from_nick(src)
         if player:
             player.nick = new_nick
-            self.penalty(player, "nick")
+            self.penalize(player, "nick")
 
 
     def nick_joined(self, src):
@@ -734,7 +734,7 @@ class DawdleBot(object):
         self._onchan.remove(src)
         player = self._players.from_nick(src)
         if player:
-            self.penalty(player, "part")
+            self.penalize(player, "part")
             player.online = False
             self._players.write()
 
@@ -743,7 +743,7 @@ class DawdleBot(object):
         self._onchan.remove(src)
         player = self._players.from_nick(src)
         if player:
-            self.penalty(player, "quit")
+            self.penalize(player, "quit")
             player.online = False
             self._players.write()
 
@@ -752,7 +752,7 @@ class DawdleBot(object):
         self._onchan.remove(src)
         player = self._players.from_nick(src)
         if player:
-            self.penalty(player, "kick")
+            self.penalize(player, "kick")
             player.online = False
             self._players.write()
 
@@ -888,7 +888,7 @@ class DawdleBot(object):
         self._irc.notice(nick, "You have been logged out.")
         player.online = False
         self._players.write()
-        self.penalty(player, "logout")
+        self.penalize(player, "logout")
 
 
     def cmd_backup(self, player, nick, args):
@@ -1150,17 +1150,17 @@ class DawdleBot(object):
                 good_count += 1
 
         day_ticks = 86400/conf['self_clock']
-        if self.randint('hog_trigger', 20 * day_ticks) < online_count:
+        if self.randint('hog_trigger', 0, 20 * day_ticks) < online_count:
             self.hand_of_god()
-        if self.randint('team_battle_trigger', 24 * day_ticks) < online_count:
+        if self.randint('team_battle_trigger', 0, 24 * day_ticks) < online_count:
             self.team_battle(op)
-        if self.randint('calamity_trigger', 8 * day_ticks) < online_count:
+        if self.randint('calamity_trigger', 0, 8 * day_ticks) < online_count:
             self.calamity()
-        if self.randint('godsend_trigger', 4 * day_ticks) < online_count:
+        if self.randint('godsend_trigger', 0, 4 * day_ticks) < online_count:
             self.godsend()
-        if self.randint('evilness_trigger', 8 * day_ticks) < evil_count:
+        if self.randint('evilness_trigger', 0, 8 * day_ticks) < evil_count:
             self.evilness(op)
-        if self.randint('goodness_trigger', 12 * day_ticks) < good_count:
+        if self.randint('goodness_trigger', 0, 12 * day_ticks) < good_count:
             self.goodness(op)
 
         self.move_players()
