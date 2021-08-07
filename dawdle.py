@@ -37,6 +37,11 @@ VERSION = "1.0.0"
 PENALTIES = {"quit": 20, "nick": 30, "message": 1, "part": 200, "kick": 250, "logout": 20}
 PENDESC = {"quit": "quitting", "nick": "changing nicks", "message": "messaging", "part": "parting", "kick": "being kicked", "logout": "LOGOUT command"}
 
+
+# Output throttling - handle bursts of 5 messages every ten seconds
+THROTTLE_RATE = 5
+THROTTLE_PERIOD = 10
+
 # command line overrides .irpg.conf
 parser = argparse.ArgumentParser(description="IdleRPG clone")
 parser.add_argument("-v", "--verbose")
@@ -435,14 +440,21 @@ class IRCClient:
         self._writer = None
         self._nick = conf['botnick']
 
+
     async def connect(self, addr, port):
         reader, self._writer = await asyncio.open_connection(addr, port, ssl=True)
-        self.send(f"NICK {conf['botnick']}")
-        self.send(f"USER {conf['botuser']} 0 * :{conf['botrlnm']}")
+        self._connected = True
+        self._messages_sent = 0
+        self._writeq = []
+        self._flushq_task = None
+        self.sendnow(f"NICK {conf['botnick']}")
+        self.sendnow(f"USER {conf['botuser']} 0 * :{conf['botrlnm']}")
         self._bot.connected(self)
         while True:
             line = await reader.readline()
             if not line:
+                if self._flushq_task:
+                    self._flushq_task.cancel()
                 self._bot.disconnected()
                 break
             # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
@@ -452,15 +464,51 @@ class IRCClient:
                 line = str(line, encoding='latin-1')
             line = line.rstrip('\r\n')
             if conf["debug"]:
-                print("<- ", line)
+                print(int(time.time()), "<-", line)
             msg = self.parse_message(line)
             self.dispatch(msg)
 
 
     def send(self, s):
+        b = bytes(s+"\r\n", encoding='utf8')
+        if self._messages_sent < THROTTLE_RATE:
+            if conf["debug"]:
+                print(int(time.time()), f"({self._messages_sent})->", s)
+            self._messages_sent += 1
+            self._writer.write(b)
+        else:
+            self._writeq.append(b)
+
+        # The flushq task will reset messages_sent after the throttle period.
+        if not self._flushq_task:
+            self._flushq_task = asyncio.create_task(self.flushq_task())
+
+
+    def sendnow(self, s):
         if conf["debug"]:
-            print("-> ", s)
-        self._writer.write(bytes(s+"\r\n", encoding='utf8'))
+            print(int(time.time()), "=>", s)
+        b = bytes(s+"\r\n", encoding='utf8')
+        self._messages_sent += 1
+        self._writer.write(b)
+        if not self._flushq_task:
+            self._flushq_task = asyncio.create_task(self.flushq_task())
+
+
+    async def flushq_task(self):
+        await asyncio.sleep(THROTTLE_PERIOD)
+        self._messages_sent = max(0, self._messages_sent - THROTTLE_RATE)
+        while self._writeq:
+            while self._writeq and self._messages_sent < THROTTLE_RATE:
+                if conf["debug"]:
+                    print(int(time.time()), f"({self._messages_sent})~>", str(self._writeq[0], encoding='utf8'))
+                self._messages_sent += 1
+                self._writer.write(self._writeq[0])
+                self._writeq = self._writeq[1:]
+            if self._writeq:
+                await asyncio.sleep(THROTTLE_PERIOD)
+                self._messages_sent = max(0, self._messages_sent - THROTTLE_RATE)
+
+        self._flushq_task = None
 
 
     def parse_message(self, line):
@@ -500,12 +548,11 @@ class IRCClient:
 
 
     def handle_ping(self, msg):
-        self.send(f"PONG :{msg.trailing}")
+        self.sendnow(f"PONG :{msg.trailing}")
 
 
     def handle_376(self, msg):
         """RPL_ENDOFMOTD - server is ready"""
-        print("mode")
         self.mode(conf['botnick'], conf['botmodes'])
         self.join(conf['botchan'])
 
@@ -525,7 +572,7 @@ class IRCClient:
         """RPL_ENDOFNAMES - the actual end of channel joining"""
         # We know who is in the channel now
         if 'botopcmd' in conf:
-            self.send(re.sub(r'%botnick%', self._nick, conf['botopcmd']))
+            self.sendnow(re.sub(r'%botnick%', self._nick, conf['botopcmd']))
         self._bot.ready()
 
 
@@ -533,6 +580,7 @@ class IRCClient:
         """ERR_NICKNAME_IN_USE - try another nick"""
         self._nick = self._nick + "0"
         self.nick(self._nick)
+
 
     def handle_join(self, msg):
         if msg.src != self._nick:
@@ -577,11 +625,13 @@ class IRCClient:
         else:
             self._bot.channel_message(msg.src, msg.trailing)
 
+
     def nick(self, nick):
-        self.send(f"NICK {nick}")
+        self.sendnow(f"NICK {nick}")
+
 
     def join(self, channel):
-        self.send(f"JOIN {channel}")
+        self.sendnow(f"JOIN {channel}")
 
 
     def notice(self, target, text):
@@ -666,7 +716,7 @@ class DawdleBot(object):
         self._qtimer = time.time() + self.randint('qtimer_init', 12, 24)*3600
 
 
-    def disconnected(self, evt):
+    def disconnected(self):
         self._irc = None
         self._onchan = []
         self._state = 'disconnected'
@@ -872,6 +922,10 @@ class DawdleBot(object):
             self._players.delete_player(player.name)
 
 
+    def cmd_flood(self, player, nick, args):
+        for i in range(1, 100):
+            self._irc.notice(nick, f"{i}. This is the text that never ends.  It goes on and on my friend.  The client kept on sending it, not knowing what it does. And it will go on forever just because...")
+
     def cmd_newpass(self, player, nick, args):
         parts = args.split(' ', 1)
         if len(parts) != 2:
@@ -934,8 +988,8 @@ class DawdleBot(object):
 
     def cmd_clearq(self, player, nick, args):
         """Clear outgoing message queue."""
-        # We don't have one, but we should.
-        pass
+        self._irc._writeq = []
+        self._irc.notice(nick, "Output queue cleared.")
 
 
     def cmd_del(self, player, nick, args):
