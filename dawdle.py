@@ -539,10 +539,10 @@ class IRCClient:
         # Arguments before the trailing argument (after the colon) are space-delimited
         args = args.rstrip().split(' ')
         # There's nothing special about the trailing argument except it can have spaces.
-        if trailing != "":
+        if trailing is not None:
             args.append(trailing)
         # Numeric responses specify a useless target afterwards
-        if re.match(r'^\d$', cmd):
+        if re.match(r'\d+', cmd):
             args = args[1:]
         # Support time tag, which allows servers and bouncers to send history
         if 'time' in tags:
