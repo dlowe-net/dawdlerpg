@@ -116,6 +116,15 @@ def parse_val(s):
     return s
 
 
+def grouper(iterable, n, fillvalue=None):
+    """Collect data into fixed-length chunks or blocks
+
+    grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
+    From python itertools recipes"""
+    args = [iter(iterable)] * n
+    return izip_longest(fillvalue=fillvalue, *args)
+
+
 def duration(secs):
     d, secs = int(secs / 86400), secs % 86400
     h, secs = int(secs / 3600), secs % 3600
@@ -447,6 +456,7 @@ class IRCClient:
         self._messages_sent = 0
         self._writeq = []
         self._flushq_task = None
+        self._maxmodes = 3
         self.sendnow(f"NICK {conf['botnick']}")
         self.sendnow(f"USER {conf['botuser']} 0 * :{conf['botrlnm']}")
         self._bot.connected(self)
@@ -551,6 +561,13 @@ class IRCClient:
         self.sendnow(f"PONG :{msg.trailing}")
 
 
+    def handle_005(self, msg):
+        """RPL_ISUPPORT - server features and information"""
+        params = dict([arg.split('=') for arg in msg.args])
+        if 'MODES' in params:
+            self._maxmodes = int(params['MODES'])
+
+
     def handle_376(self, msg):
         """RPL_ENDOFMOTD - server is ready"""
         self.mode(conf['botnick'], conf['botmodes'])
@@ -639,7 +656,8 @@ class IRCClient:
 
 
     def mode(self, target, *modeinfo):
-        self.send(f"MODE {target} {' '.join(modeinfo)}")
+        for modes in grouper(modeinfo, self._maxmodes):
+            self.send(f"MODE {target} {' '.join(modes.remove(None))}")
 
 
     def chanmsg(self, text):
