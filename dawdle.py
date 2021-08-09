@@ -410,6 +410,7 @@ class PlayerDB(object):
     def online(self):
         return [p for p in self._players.values() if p.online]
 
+
     def max_player_power(self):
         return max([p.itemsum() for p in self._players.values()])
 
@@ -444,6 +445,7 @@ class IRCClient:
     - Output throttling
     - NickServ authentication
     - IRC message decoding and parsing
+    - Tracking users in the channel
     - Calling methods on the bot interface
  """
     MESSAGE_RE = re.compile(r'^(?:@(\S*) )?(?::([^ !]*)(?:!([^ @]*)(?:@([^ ]*))?)?\s+)?(\S+)\s*((?:[^:]\S*(?:\s+|$))*)(?::(.*))?')
@@ -645,8 +647,8 @@ class IRCClient:
 
     def handle_join(self, msg):
         if msg.src != self._nick:
-            self.userhosts[nick] = f"{user}@{host}"
-            self.usermodes[nick] = set()
+            self.userhosts[msg.src] = f"{msg.user}@{msg.host}"
+            self.usermodes[msg.src] = set()
 
     def handle_part(self, msg):
         del self.userhosts[msg.src]
@@ -711,9 +713,13 @@ class IRCClient:
         if msg.src == conf['botnick']:
             # Grab my nick that someone left
             self.nick(conf['botnick'])
-        del self.userhosts[src]
-        del self.usermodes[src]
-        self._bot.nick_quit(msg.src)
+        del self.userhosts[msg.src]
+        del self.usermodes[msg.src]
+        if conf['detectsplits'] and re.match(r'\S+\.\S+ \S+\.\S+', msg.trailing):
+            # Don't penalize on netsplit
+            self._bot.netsplit(msg.src)
+        else:
+            self._bot.nick_quit(msg.src)
 
 
     def handle_notice(self, msg):
@@ -825,6 +831,7 @@ class DawdleBot(object):
                 autologin.append(p.name)
             else:
                 p.online = False
+                p.lastlogin = time.time()
         self._players.write()
         if autologin:
             self._irc.chanmsg(f"{len(autologin)} user{plural(len(autologin), '', 's')} automatically logged in; accounts: {', '.join(autologin)}")
@@ -917,7 +924,14 @@ class DawdleBot(object):
         if player:
             self.penalize(player, "part")
             player.online = False
+            player.lastlogin = time.time()
             self._players.write()
+
+
+    def netsplit(self, src):
+        player = self._players.from_nick(src)
+        if player:
+            player.lastlogin = time.time()
 
 
     def nick_quit(self, src):
@@ -925,6 +939,7 @@ class DawdleBot(object):
         if player:
             self.penalize(player, "quit")
             player.online = False
+            player.lastlogin = time.time()
             self._players.write()
 
 
@@ -933,6 +948,7 @@ class DawdleBot(object):
         if player:
             self.penalize(player, "kick")
             player.online = False
+            player.lastlogin = time.time()
             self._players.write()
 
 
@@ -1072,6 +1088,7 @@ class DawdleBot(object):
     def cmd_logout(self, player, nick, args):
         self._irc.notice(nick, "You have been logged out.")
         player.online = False
+        player.lastlogin = time.time()
         self._players.write()
         if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
                 self._irc.mode(conf['botchan'], "-v", nick)
@@ -1311,6 +1328,14 @@ class DawdleBot(object):
         if kind != 'quit':
             self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
 
+    def expire_splits(self):
+        expiration = time.time() - conf['splitwait']
+        for p in self._players.online():
+            if p.nick not in self._irc.userhosts and p.lastlogin < expiration:
+                print(f"Expiring {p.nick} who was logged in as {p.nick} but was lost in a netsplit.")
+                p.online = False
+        self._players.write()
+
     async def rpcheck_loop(self):
         try:
             last_time = time.time() - 1
@@ -1325,6 +1350,9 @@ class DawdleBot(object):
 
 
     def rpcheck(self, passed):
+        if conf['detectsplits']:
+            self.expire_splits()
+
         online_players = self._players.online()
         online_count = 0
         evil_count = 0
