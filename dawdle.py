@@ -295,9 +295,156 @@ class Player(object):
         return sum
 
 
-class PlayerDB(object):
+class PlayerStore(object):
+    """Interface for a PlayerDB backend."""
 
-    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
+    def create(self):
+        pass
+
+    def readall(self):
+        pass
+
+    def writeall(self):
+        pass
+
+    def close(self):
+        pass
+
+    def new(self):
+        pass
+
+    def rename(self):
+        pass
+
+    def delete(self):
+        pass
+
+class IdleRPGPlayerStore(PlayerStore):
+
+    IRPG_FIELDS = ["username", "pass", "is admin", "level", "class", "next ttl", "nick", "userhost", "online", "idled", "x pos", "y pos", "pen_mesg", "pen_nick", "pen_part", "pen_kick", "pen_quit", "pen_quest", "pen_logout", "created", "last login", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
+
+    # Instead of names, idlerpg decided to tack on codes to the number.
+    ITEMCODES = {
+        "Mattt's Omniscience Grand Crown":"a",
+        "Juliet's Glorious Ring of Sparkliness":"h",
+        "Res0's Protectorate Plate Mail":"b",
+        "Dwyn's Storm Magic Amulet":"c",
+        "Jotun's Fury Colossal Sword":"d",
+        "Drdink's Cane of Blind Rage":"e",
+        "Mrquick's Magical Boots of Swiftness":"f",
+        "Jeff's Cluehammer of Doom":"g"
+    }
+
+    def code_to_item(self, s):
+        match = re.match(r"^(\d+)(.?)", s)
+        if not match:
+            print(f"wtf not matched: {s}")
+        lvl = int(match[1])
+        if match[2]:
+            return (lvl, [k for k,v in IdleRPGPlayerStore.ITEMCODES.items() if v == match[2]][0])
+        return (lvl, "")
+
+    def __init__(self, dbpath):
+        self._dbpath = dbpath
+
+
+    def create(self):
+        self.writeall({})
+
+
+    def exists(self):
+        return os.path.exists(self._dbpath)
+
+
+    def readall(self):
+        players = {}
+        with open(self._dbpath) as inf:
+            for line in inf.readlines():
+                if re.match(r'^\s*(?:#|$)', line):
+                    continue
+                parts = line.rstrip().split("\t")
+                if len(parts) != 32:
+                    print(f"omg line corrupt {len(parts)} fields:", repr(line))
+                    sys.exit(-1)
+
+                d = dict(zip(["name", "pw", "isadmin", "level", "cclass", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"], parts))
+                # convert items
+                for i in Player.ITEMS:
+                    d[i], d[i+'name'] = self.code_to_item(d[i])
+                # convert int fields
+                for f in ["idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
+                    d[f] = int(d[f])
+                # convert boolean fields
+                for f in ["isadmin", "online"]:
+                    d[f] = (d[f] == '1')
+
+                p = Player.from_dict(d)
+                players[p.name] = p
+        return players
+
+
+    def _player_to_record(self, p):
+        return "\t".join([
+            p.name,
+            p.pw,
+            "1" if p.isadmin else "0",
+            str(p.level),
+            p.cclass,
+            str(p.nextlvl),
+            p.nick,
+            p.userhost,
+            "1" if p.online else "0",
+            str(p.idled),
+            str(p.posx),
+            str(p.posy),
+            str(p.penmessage),
+            str(p.pennick),
+            str(p.penpart),
+            str(p.penkick),
+            str(p.penquit),
+            str(p.penquest),
+            str(p.penlogout),
+            str(int(p.created)),
+            str(int(p.lastlogin)),
+            f"{p.amulet}{IdleRPGPlayerStore.ITEMCODES.get(p.amuletname, '')}",
+            f"{p.charm}{IdleRPGPlayerStore.ITEMCODES.get(p.charmname, '')}",
+            f"{p.helm}{IdleRPGPlayerStore.ITEMCODES.get(p.helmname, '')}",
+            f"{p.boots}{IdleRPGPlayerStore.ITEMCODES.get(p.bootsname, '')}",
+            f"{p.gloves}{IdleRPGPlayerStore.ITEMCODES.get(p.glovesname, '')}",
+            f"{p.ring}{IdleRPGPlayerStore.ITEMCODES.get(p.ringname, '')}",
+            f"{p.leggings}{IdleRPGPlayerStore.ITEMCODES.get(p.leggingsname, '')}",
+            f"{p.shield}{IdleRPGPlayerStore.ITEMCODES.get(p.shieldname, '')}",
+            f"{p.tunic}{IdleRPGPlayerStore.ITEMCODES.get(p.tunicname, '')}",
+            f"{p.weapon}{IdleRPGPlayerStore.ITEMCODES.get(p.weaponname, '')}",
+            str(p.alignment)
+        ]) + "\n"
+
+    def writeall(self, players):
+        with open(self._dbpath, "w") as ouf:
+            ouf.write("# " + "\t".join(IdleRPGPlayerStore.IRPG_FIELDS) + "\n")
+            for p in players.values():
+                ouf.write(self._player_to_record(p))
+
+
+    def new(self, p):
+        with open(self._dbpath, "a") as ouf:
+            ouf.write(self._player_to_record(p))
+
+
+    def rename(self, old_name, new_name):
+        players = self.readall()
+        players[new_name] = players[old_name]
+        del players[old_name]
+        self.writeall(players)
+
+
+    def delete(self, pname):
+        players = self.readall()
+        players.pop(pname, None)
+        self.writeall(players)
+
+
+class Sqlite3PlayerStore(PlayerStore):
 
 
     @staticmethod
@@ -308,9 +455,75 @@ class PlayerDB(object):
         return d
 
 
+    def _connect(self):
+        if self._db is None:
+            self._db = sqlite3.connect(self._dbpath)
+            self._db.row_factory = Sqlite3PlayerStore.dict_factory
+
+        return self._db
+
+
     def __init__(self, dbpath):
         self._dbpath = dbpath
         self._db = None
+
+
+    def create(self):
+        with self._connect() as cur:
+            cur.execute(f"create table players ({','.join(PlayerDB.FIELDS)})")
+
+
+    def exists(self):
+        return os.path.exists(self._dbpath)
+
+
+    def readall(self):
+        players = {}
+        with self._connect() as con:
+            cur = con.execute("select * from players")
+            for d in cur.fetchall():
+                players[d['name']] = Player.from_dict(d)
+        return players
+
+
+    def writeall(self, players):
+        with self._connect() as cur:
+            update_fields = ",".join(f"{k}=:{k}" for k in PlayerDB.FIELDS)
+            cur.executemany(f"update players set {update_fields} where name=:name",
+                            [vars(p) for p in players.values()])
+
+
+    def close(self):
+        self._db.close()
+
+
+    def new(self, p):
+        with self._connect() as cur:
+            d = vars(p)
+            cur.execute(f"insert into players values ({('?, ' * len(d))[:-2]})",
+                        [d[k] for k in PlayerDB.FIELDS])
+            cur.commit()
+
+
+    def rename(self):
+        with self._connect() as cur:
+            cur.execute("update players set name = ? where name = ?", (new_name, old_name))
+            cur.commit()
+
+
+    def delete(self):
+        with self._connect() as cur:
+            cur.execute("delete from players where name = ?", (pname,))
+            cur.commit()
+
+
+class PlayerDB(object):
+
+    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
+
+
+    def __init__(self, store):
+        self._store = store
         self._players = {}
 
     def __getitem__(self, pname):
@@ -320,42 +533,27 @@ class PlayerDB(object):
     def __contains__(self, pname):
         return pname in self._players
 
-    def _connect(self):
-        if self._db is None:
-            self._db = sqlite3.connect(self._dbpath)
-            self._db.row_factory = PlayerDB.dict_factory
-
-        return self._db
-
 
     def close(self):
         """Close the underlying db.  Used for testing."""
-        self._db.close()
+        self._store.close()
 
     def exists(self):
-        return os.path.exists(self._dbpath)
+        return self._store.exists()
 
 
     def load(self):
         """Load all players from database into memory"""
-        self._players = {}
-        with self._connect() as con:
-            cur = con.execute("select * from players")
-            for d in cur.fetchall():
-                self._players[d['name']] = Player.from_dict(d)
+        self._players = self._store.readall()
 
 
     def write(self):
         """Write all players into database"""
-        with self._connect() as cur:
-            update_fields = ",".join(f"{k}=:{k}" for k in PlayerDB.FIELDS)
-            cur.executemany(f"update players set {update_fields} where name=:name",
-                            [vars(p) for p in self._players.values()])
+        self._store.writeall(self._players)
 
 
     def create(self):
-        with self._connect() as cur:
-            cur.execute(f"create table players ({','.join(PlayerDB.FIELDS)})")
+        self._store.create()
 
 
     def new_player(self, pname, pclass, ppass):
@@ -368,12 +566,7 @@ class PlayerDB(object):
 
         p = Player.new_player(pname, pclass, ppass)
         self._players[pname] = p
-
-        with self._connect() as cur:
-            d = vars(p)
-            cur.execute(f"insert into players values ({('?, ' * len(d))[:-2]})",
-                        [d[k] for k in PlayerDB.FIELDS])
-            cur.commit()
+        self._store.new(p)
 
         return p
 
@@ -381,17 +574,13 @@ class PlayerDB(object):
     def rename_player(self, old_name, new_name):
         self._players[new_name] = self._players[old_name]
         self._players[new_name].name = new_name
-        del self._players[old_name]
-        with self._connect() as cur:
-            cur.execute("update players set name = ? where name = ?", (new_name, old_name))
-            cur.commit()
+        self._players.pop(old_name, None)
+        self._store.rename(old_name, new_name)
 
 
     def delete_player(self, pname):
-        del self._players[pname]
-        with self._connect() as cur:
-            cur.execute("delete from players where name = ?", (pname,))
-            cur.commit()
+        self._players.pop(pname)
+        self._store.delete(pname)
 
 
     def from_nick(self, nick):
@@ -1834,7 +2023,7 @@ def start_bot():
         conf["okurls"] = args.okurl
 
     global db
-    db = PlayerDB(conf["dbfile"])
+    db = PlayerDB(IdleRPGPlayerStore(conf["dbfile"]))
     if db.exists():
         db.load()
     else:

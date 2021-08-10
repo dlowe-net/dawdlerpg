@@ -8,11 +8,11 @@ import tempfile
 import time
 import unittest
 
-class TestPlayerDB(unittest.TestCase):
+class TestPlayerDBSqlite3(unittest.TestCase):
     def test_db(self):
         dawdle.conf['rpbase'] = 600
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = dawdle.PlayerDB(os.path.join(tmpdir, 'dawdle_test.db'))
+            db = dawdle.PlayerDB(dawdle.Sqlite3PlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
             self.assertFalse(db.exists())
             db.create()
             p = db.new_player('foo', 'bar', 'baz')
@@ -26,7 +26,7 @@ class TestPlayerDB(unittest.TestCase):
 
     def test_passwords(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = dawdle.PlayerDB(os.path.join(tmpdir, 'dawdle_test.db'))
+            db = dawdle.PlayerDB(dawdle.Sqlite3PlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
             self.assertFalse(db.exists())
             db.create()
             p = db.new_player('foo', 'bar', 'baz')
@@ -34,6 +34,51 @@ class TestPlayerDB(unittest.TestCase):
             self.assertFalse(db.check_login('foo', 'azb'))
             p.set_password('azb')
             self.assertTrue(db.check_login('foo', 'azb'))
+            db.close()
+
+
+class TestPlayerDBIdleRPG(unittest.TestCase):
+    def test_db(self):
+        dawdle.conf['rpbase'] = 600
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = dawdle.PlayerDB(dawdle.IdleRPGPlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
+            self.assertFalse(db.exists())
+            db.create()
+            p = db.new_player('foo', 'bar', 'baz')
+            p.online = True
+            db.write()
+            self.assertTrue(db.exists())
+            db.load()
+            self.assertEqual(db['foo'].name, 'foo')
+            self.assertEqual(db['foo'].online, True)
+            db.close()
+
+    def test_passwords(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = dawdle.PlayerDB(dawdle.IdleRPGPlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
+            self.assertFalse(db.exists())
+            db.create()
+            p = db.new_player('foo', 'bar', 'baz')
+            self.assertTrue(db.check_login('foo', 'baz'))
+            self.assertFalse(db.check_login('foo', 'azb'))
+            p.set_password('azb')
+            self.assertTrue(db.check_login('foo', 'azb'))
+            db.close()
+
+    def test_items(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = dawdle.PlayerDB(dawdle.IdleRPGPlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
+            db.create()
+            p = db.new_player('foo', 'bar', 'baz')
+            p.amulet = 55
+            p.helm = 42
+            p.helmname = "Jeff's Cluehammer of Doom"
+            db.write()
+            db.load()
+            p = db['foo']
+            self.assertEqual(p.amulet, 55)
+            self.assertEqual(p.helm, 42)
+            self.assertEqual(p.helmname, "Jeff's Cluehammer of Doom")
             db.close()
 
 
@@ -487,9 +532,6 @@ class TestQuest(unittest.TestCase):
         self.assertEqual(op[1].nextlvl, 996)
         self.assertEqual(op[2].nextlvl, 996)
         self.assertEqual(op[3].nextlvl, 996)
-
-
-
 
 
 if __name__ == "__main__":
