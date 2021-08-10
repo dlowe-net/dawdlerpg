@@ -373,7 +373,7 @@ class IdleRPGPlayerStore(PlayerStore):
                 for i in Player.ITEMS:
                     d[i], d[i+'name'] = self.code_to_item(d[i])
                 # convert int fields
-                for f in ["idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
+                for f in ["nextlvl", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
                     d[f] = int(d[f])
                 # convert boolean fields
                 for f in ["isadmin", "online"]:
