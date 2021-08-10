@@ -476,10 +476,10 @@ class TestQuest(unittest.TestCase):
             "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
-        self.bot.quest_start()
+        self.bot.quest_start(now)
         # time passes
-        self.bot._quest.qtime = time.time() - 1
-        self.bot.quest_check()
+        self.bot._quest.qtime = now-1
+        self.bot.quest_check(now)
 
         self.assertListEqual(self.irc.chanmsgs, [
             "a, b, c, and d have been chosen by the gods to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu.  Quest to end in 0 days, 12:00:00.",
@@ -504,13 +504,13 @@ class TestQuest(unittest.TestCase):
             "quest_selection": "Q2 400 475 480 380 explore and chart the dark lands of T'rnalvph",
         }
         self.bot._players._online = op
-        self.bot.quest_start()
+        self.bot.quest_start(now)
         for p in op:
             p.posx, p.posy = 400, 475
-        self.bot.quest_check()
+        self.bot.quest_check(1)
         for p in op:
             p.posx, p.posy = 480, 380
-        self.bot.quest_check()
+        self.bot.quest_check(2)
 
         self.assertEqual(self.irc.chanmsgs, [
             "a, b, c, and d have been chosen by the gods to explore and chart the dark lands of T'rnalvph.  Participants must first reach (400,475), then (480,380). See https://example.com/ to monitor their journey's progress.",
@@ -526,7 +526,6 @@ class TestQuest(unittest.TestCase):
     def test_questing_failure(self):
         dawdle.conf['rppenstep'] = 1.14
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
-        self.bot._players._online = op
         now = time.time()
         for p in op:
             p.online = True
@@ -538,7 +537,7 @@ class TestQuest(unittest.TestCase):
             "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
-        self.bot.quest_start()
+        self.bot.quest_start(now)
         self.bot.penalize(op[0], 'logout')
 
         self.assertListEqual(self.irc.chanmsgs, [
@@ -556,23 +555,26 @@ class TestRPCheck(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['rpstep'] = 1.14
         dawdle.conf['detectsplits'] = True
         dawdle.conf['splitwait'] = 300
         dawdle.conf['eventsfile'] = "events.txt"
         dawdle.conf['writequestfile'] = True
         dawdle.conf['questfilename'] = "testquestfile.txt"
         dawdle.conf['self_clock'] = 1
-        dawdle.conf['mapx'] = 300
-        dawdle.conf['mapy'] = 300
+        dawdle.conf['mapx'] = 500
+        dawdle.conf['mapy'] = 500
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
     def test_rpcheck(self):
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
+        level = 25
         for p in op:
-            p.level = 25
-        self.bot._players._online = op
+            p.online = True
+            p.level = level
+            level += 3
         self.bot.rpcheck(0, 0)
 
 if __name__ == "__main__":

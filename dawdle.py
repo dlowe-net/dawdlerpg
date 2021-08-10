@@ -1561,7 +1561,7 @@ class DawdleBot(object):
 
         day_ticks = 86400/conf['self_clock']
         if self.randint('hog_trigger', 0, 20 * day_ticks) < online_count:
-            self.hand_of_god()
+            self.hand_of_god(op)
         if self.randint('team_battle_trigger', 0, 24 * day_ticks) < online_count:
             self.team_battle(op)
         if self.randint('calamity_trigger', 0, 8 * day_ticks) < online_count:
@@ -1574,7 +1574,7 @@ class DawdleBot(object):
             self.goodness(op)
 
         self.move_players()
-        self.quest_check()
+        self.quest_check(now)
 
         if not pause_mode:
             self._players.write()
@@ -1654,7 +1654,7 @@ class DawdleBot(object):
 
         for si in special_items:
             if player.level >= si.minlvl and self.randomly('specitem_find', 40):
-                ilvl = si.itemlvl + self.randint('specitem_level', si.lvlspread)
+                ilvl = si.itemlvl + self.randint('specitem_level', 0, si.lvlspread)
                 player.acquire_item(si.kind, ilvl, si.name)
                 self._irc.notice(player.nick,
                                  f"The light of the gods shines down upon you! You have "
@@ -1683,6 +1683,7 @@ class DawdleBot(object):
                              f"You found a level {level} {Player.ITEMDESC[item]}. "
                              f"Your current {Player.ITEMDESC[item]} is level {old_level}, "
                              f"so it seems Luck is against you.  You toss the {Player.ITEMDESC[item]}.")
+
 
     def pvp_battle(self, player, opp, flavor_start, flavor_win, flavor_loss):
         if opp is None:
@@ -1772,7 +1773,7 @@ class DawdleBot(object):
         if not player:
             return
 
-        if self.randomly('calamity_item_damage'):
+        if self.randomly('calamity_item_damage', 10):
             # Item damaging calamity
             item = self.randchoice('calamity_item', Player.ITEMS)
             if item == "ring":
@@ -1875,7 +1876,7 @@ class DawdleBot(object):
                                   f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
                                   f"behind, which {target.name} then takes.")
             else:
-                self._irc.notice(player,
+                self._irc.notice(player.nick,
                                  f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
                                  f"but realized it was lower level than your own.  You creep "
                                  f"back into the shadows.")
@@ -1916,19 +1917,22 @@ class DawdleBot(object):
             desty = self._quest.dests[self._quest.stage-1][1]
             for p in self._quest.questors:
                 # mode 2 questors always move towards the next goal
-                distx = p.posx - destx
+                xmove = 0
+                ymove = 0
+                distx = destx - p.posx
                 if distx != 0:
                     if abs(distx) > mapx/2:
                         distx = -distx
-                    xdir = distx / abs(distx)
-                    p.posx = (p.posx + xdir) % mapx
+                    xmove = distx / abs(distx) # normalize to -1/0/1
 
-                disty = p.posy - desty
+                disty = desty - p.posy
                 if disty != 0:
                     if abs(disty) > mapy/2:
                         disty = -disty
-                    ydir = disty / abs(disty)
-                    p.posy = (p.posy + ydir) % mapy
+                    ymove = disty / abs(disty) # normalize to -1/0/1
+
+                p.posx = (p.posx + xmove) % mapx
+                p.posy = (p.posy + ymove) % mapy
                 # take questors out of rotation for movement and pvp
                 op.remove(p)
 
@@ -1951,8 +1955,8 @@ class DawdleBot(object):
                 combatants[(p.posx, p.posy)] = p
 
 
-    def quest_start(self):
-        latest_login_time = time.time() - 36000
+    def quest_start(self, now):
+        latest_login_time = now - 36000
         qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
         if len(qp) < 4:
             return
@@ -1988,12 +1992,12 @@ class DawdleBot(object):
                               f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
 
 
-    def quest_check(self):
+    def quest_check(self, now):
         if self._quest is None:
-            if time.time() >= self._qtimer:
-                self.quest_start()
+            if now >= self._qtimer:
+                self.quest_start(now)
         elif self._quest.mode == 1:
-            if time.time() >= self._quest.qtime:
+            if now >= self._quest.qtime:
                 qp = self._quest.questors
                 self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                                   f"have blessed the realm by completing their quest! 25% of "
@@ -2001,7 +2005,7 @@ class DawdleBot(object):
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
                 self._quest = None
-                self._qtimer = time.time() + 6*3600
+                self._qtimer = now + 6*3600
                 self.write_quest_file()
         elif self._quest.mode == 2:
             destx = self._quest.dests[self._quest.stage-1][0]
@@ -2027,7 +2031,7 @@ class DawdleBot(object):
                     for q in qp:
                         q.nextlvl = int(q.nextlvl * 0.75)
                     self._quest = None
-                    self._qtimer = time.time() + 6*3600
+                    self._qtimer = now + 6*3600
                 self.write_quest_file()
 
 
