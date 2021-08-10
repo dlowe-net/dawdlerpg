@@ -1486,8 +1486,8 @@ class DawdleBot(object):
             self._irc.notice(nick,
                              f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                              f"are on a quest to {quest.text}. Participants must first reach "
-                             f"({quest.dests[0][0]}, {quest.dest[0][1]}), then "
-                             f"({quest.dests[1][0]}, {quest.dest[1][1]}).{mapnotice}")
+                             f"({quest.dests[0][0]}, {quest.dests[0][1]}), then "
+                             f"({quest.dests[1][0]}, {quest.dests[1][1]}).{mapnotice}")
 
 
     def penalize(self, player, kind, text=None):
@@ -1573,6 +1573,9 @@ class DawdleBot(object):
         if not pause_mode:
             self._players.write()
 
+        now = int(time.time())
+        if now % 120 == 0 and self._quest:
+            self.write_quest_file()
         for player in online_players:
             player.nextlvl -= passed
             player.idled += passed
@@ -1890,16 +1893,18 @@ class DawdleBot(object):
         mapy = conf['mapy']
         combatants = dict()
         if self._quest and self._quest.mode == 2:
+            destx = self._quest.dests[self._quest.stage-1][0]
+            desty = self._quest.dests[self._quest.stage-1][1]
             for p in self._quest.questors:
                 # mode 2 questors always move towards the next goal
-                distx = p.posx - self._quest.dest[0][0]
+                distx = p.posx - destx
                 if distx != 0:
                     if abs(distx) > mapx/2:
                         distx = -distx
                     xdir = distx / abs(distx)
                     p.posx = (p.posx + xdir) % mapx
 
-                disty = p.posy - self._quest.dest[0][1]
+                disty = p.posy - desty
                 if disty != 0:
                     if abs(disty) > mapy/2:
                         disty = -disty
@@ -1927,46 +1932,6 @@ class DawdleBot(object):
                 combatants[(p.posx, p.posy)] = p
 
 
-    def quest_check(self):
-        if self._quest is None:
-            if time.time() >= self._qtimer:
-                self.quest_start()
-        elif self._quest.mode == 1:
-            if time.time() >= self._quest.qtime:
-                qp = self._quest.questors
-                self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                  f"have blessed the realm by completing their quest! 25% of "
-                                  f"their burden is eliminated.")
-                for q in qp:
-                    q.nextlvl = int(q.nextlvl * 0.75)
-                self._quest = None
-                self._qtimer = time.time() + 6*3600
-        elif self._quest.mode == 2:
-            done = True
-            for q in self._quest.questors:
-                if q.posx != self._quest.dest[0][0] or q.posy != self._quest.dest[0][1]:
-                    done = False
-                    break
-            if done:
-                self._quest.dest = self._quest.dest[1:]
-                qp = self._quest.questors
-                if len(self._quest.dest) > 0:
-                    if len(self._quest.dest) == 1:
-                        landmarks_remain = "1 landmark remains."
-                    else:
-                        landmarks_remain = f"{len(self._quest.dest)} landmarks remain."
-                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                      f"have reached a landmark on their journey! {landmarks_remain}")
-                else:
-                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                      f"have completed their journey! 25% of "
-                                      f"their burden is eliminated.")
-                    for q in qp:
-                        q.nextlvl = int(q.nextlvl * 0.75)
-                    self._quest = None
-                    self._qtimer = time.time() + 6*3600
-
-
     def quest_start(self):
         latest_login_time = time.time() - 36000
         qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
@@ -1992,15 +1957,82 @@ class DawdleBot(object):
                               f"{duration(quest_time)}.")
         elif match[1] == '2':
             self._quest.mode = 2
-            self._quest.dest = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
+            self._quest.stage = 1
+            self._quest.dests = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
             self._quest.text = match[6]
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
             self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
                               f"been chosen by the gods to {self._quest.text}.  Participants must first "
-                              f"reach ({self._quest.dest[0][0]},{self._quest.dest[0][1]}), "
-                              f"then ({self._quest.dest[1][0]},{self._quest.dest[1][1]}).{mapnotice}")
+                              f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
+                              f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
+
+
+    def quest_check(self):
+        if self._quest is None:
+            if time.time() >= self._qtimer:
+                self.quest_start()
+        elif self._quest.mode == 1:
+            if time.time() >= self._quest.qtime:
+                qp = self._quest.questors
+                self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                  f"have blessed the realm by completing their quest! 25% of "
+                                  f"their burden is eliminated.")
+                for q in qp:
+                    q.nextlvl = int(q.nextlvl * 0.75)
+                self._quest = None
+                self._qtimer = time.time() + 6*3600
+                self.write_quest_file()
+        elif self._quest.mode == 2:
+            destx = self._quest.dests[self._quest.stage-1][0]
+            desty = self._quest.dests[self._quest.stage-1][1]
+            done = True
+            for q in self._quest.questors:
+                if q.posx != destx or q.posy != desty:
+                    done = False
+                    break
+            if done:
+                self._quest.stage += 1
+                qp = self._quest.questors
+                dests_left = len(self._quest.dests) - self._quest.stage + 1
+                if dests_left > 0:
+                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                      f"have reached a landmark on their journey! {dests_left} "
+                                      f"landmark{plural(dests_left, '', 's')} "
+                                      f"remain{plural(dests_left, 's', '')}.")
+                else:
+                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                      f"have completed their journey! 25% of "
+                                      f"their burden is eliminated.")
+                    for q in qp:
+                        q.nextlvl = int(q.nextlvl * 0.75)
+                    self._quest = None
+                    self._qtimer = time.time() + 6*3600
+                self.write_quest_file()
+
+
+    def write_quest_file(self):
+        if not conf['writequestfile']:
+            return
+        with open(conf['questfilename'], 'w') as ouf:
+            if not self._quest:
+                # leave behind an empty quest file
+                return
+
+            ouf.write(f"T {self._quest.text}\n"
+                      f"Y {self._quest.mode}\n")
+
+            if self._quest.mode == 1:
+                ouf.write(f"S {self._quest.qtime}\n")
+            elif self._quest.mode == 2:
+                ouf.write(f"S {self._quest.stage:2d}\n"
+                          f"P {' '.join([' '.join(str(p)) for p in self._quest.dests])}\n")
+
+            ouf.write(f"P1 {self._quest.questors[0].name}\n"
+                      f"P2 {self._quest.questors[1].name}\n"
+                      f"P3 {self._quest.questors[2].name}\n"
+                      f"P4 {self._quest.questors[3].name}\n")
 
 
 async def mainloop(client):

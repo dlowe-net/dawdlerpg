@@ -441,6 +441,8 @@ class TestQuest(unittest.TestCase):
     def setUp(self):
         dawdle.conf['rpbase'] = 600
         dawdle.conf['eventsfile'] = "events.txt"
+        dawdle.conf['writequestfile'] = True
+        dawdle.conf['questfilename'] = "testquestfile.txt"
         self.bot = dawdle.DawdleBot(FakePlayerDB())
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
