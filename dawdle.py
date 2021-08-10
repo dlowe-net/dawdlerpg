@@ -29,6 +29,7 @@ import sys
 import time
 
 from hmac import compare_digest as compare_hash
+from operator import attrgetter
 
 log = logging.getLogger()
 
@@ -602,6 +603,11 @@ class PlayerDB(object):
 
     def max_player_power(self):
         return max([p.itemsum() for p in self._players.values()])
+
+
+    def top_players(self):
+        s = sorted(self._players.values(), key=attrgetter('level'))
+        return sorted(s, key=attrgetter('nextlvl'), reverse=True)[:3]
 
 
 def first_setup():
@@ -1531,22 +1537,22 @@ class DawdleBot(object):
             while self._state == 'ready':
                 await asyncio.sleep(conf['self_clock'])
                 now = time.time()
-                self.rpcheck(int(now - last_time))
+                self.rpcheck(now, int(now - last_time))
                 last_time = now
         except Exception as err:
             print(err)
             sys.exit(2)
 
 
-    def rpcheck(self, passed):
+    def rpcheck(self, now, passed):
         if conf['detectsplits']:
             self.expire_splits()
 
-        online_players = self._players.online()
+        op = self._players.online()
         online_count = 0
         evil_count = 0
         good_count = 0
-        for player in online_players:
+        for player in op:
             online_count += 1
             if player.alignment == 'e':
                 evil_count += 1
@@ -1573,10 +1579,23 @@ class DawdleBot(object):
         if not pause_mode:
             self._players.write()
 
-        now = int(time.time())
         if now % 120 == 0 and self._quest:
             self.write_quest_file()
-        for player in online_players:
+        if now % 36000 == 0:
+            top = self._players.top_players()
+            if top:
+                self._irc.chanmsg("Idle RPG Top Players:")
+                for i, p in zip(itertools.count(), top):
+                    self._irc.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
+                                      f"Next level in {duration(p.nextlvl)}.")
+        if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
+            self.challenge_op()
+        if now % 3600 == 0 and self._irc._nick != conf['botnick']:
+            self._irc.send(conf['botghostcmd'])
+        if now % 600 == 0 and pause_mode:
+            self._irc.chanmsg("WARNING: Cannot write database in PAUSE mode!")
+
+        for player in op:
             player.nextlvl -= passed
             player.idled += passed
             if player.nextlvl < 1:

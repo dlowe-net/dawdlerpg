@@ -120,6 +120,9 @@ class TestIRCMessage(unittest.TestCase):
 
 class FakeIRCClient(object):
     def __init__(self):
+        self._nick = 'dawdlerpg'
+        self.userhosts = {}
+        self.usermodes = {}
         self.chanmsgs = []
         self.notices = {}
 
@@ -129,36 +132,49 @@ class FakeIRCClient(object):
     def notice(self, nick, text):
         self.notices.setdefault(nick, []).append(text)
 
-class FakePlayerDB(object):
+
+class FakePlayerStore(dawdle.PlayerStore):
+
     def __init__(self):
+        self._mem = {}
+
+    def create(self):
         pass
 
-
-    def write(self):
+    def readall(self):
         pass
 
+    def writeall(self, p):
+        pass
 
-    def online(self):
-        return self._online
+    def close(self):
+        pass
 
+    def new(self, p):
+        self._mem[p.name] = p
 
-    def max_player_power(self):
-        return 42
+    def rename(self, old, new):
+        self._mem[new] = self._mem[old]
+        self._mem.pop(old)
+
+    def delete(self, pname):
+        self._mem.pop(pname)
+
 
 class TestPvPBattle(unittest.TestCase):
 
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
 
     def test_player_battle_win(self):
-        a = dawdle.Player.new_player('a', 'b', 'c')
+        a = self.bot._players.new_player('a', 'b', 'c')
         a.amulet = 20
-        b = dawdle.Player.new_player('b', 'c', 'd')
+        b = self.bot._players.new_player('b', 'c', 'd')
         b.amulet = 40
         self.bot._overrides = {
             'pvp_player_roll': 20,
@@ -177,7 +193,7 @@ class TestPvPBattle(unittest.TestCase):
 
     def test_player_battle_bot(self):
         dawdle.conf['botnick'] = 'dawdlerpg'
-        a = dawdle.Player.new_player('a', 'b', 'c')
+        a = self.bot._players.new_player('a', 'b', 'c')
         a.amulet = 20
         self.bot._overrides = {
             'pvp_player_roll': 20,
@@ -188,16 +204,16 @@ class TestPvPBattle(unittest.TestCase):
         }
         self.bot.pvp_battle(a, None, "fought", "and has won", "and has lost")
         self.assertListEqual(self.irc.chanmsgs, [
-            "a [20/20] has fought dawdlerpg [10/43] and has won! 0 days, 00:02:00 is removed from a's clock.",
+            "a [20/20] has fought dawdlerpg [10/21] and has won! 0 days, 00:02:00 is removed from a's clock.",
             "a reaches next level in 0 days, 00:08:00."
             ])
         self.assertEqual(a.nextlvl, 480)
 
 
     def test_player_battle_lose(self):
-        a = dawdle.Player.new_player('a', 'b', 'c')
+        a = self.bot._players.new_player('a', 'b', 'c')
         a.amulet = 20
-        b = dawdle.Player.new_player('b', 'c', 'd')
+        b = self.bot._players.new_player('b', 'c', 'd')
         b.amulet = 40
         self.bot._overrides = {
             'pvp_player_roll': 10,
@@ -215,9 +231,9 @@ class TestPvPBattle(unittest.TestCase):
 
 
     def test_player_battle_critical(self):
-        a = dawdle.Player.new_player('a', 'b', 'c')
+        a = self.bot._players.new_player('a', 'b', 'c')
         a.amulet = 20
-        b = dawdle.Player.new_player('b', 'c', 'd')
+        b = self.bot._players.new_player('b', 'c', 'd')
         b.amulet = 40
         self.bot._overrides = {
             'pvp_player_roll': 20,
@@ -239,10 +255,10 @@ class TestPvPBattle(unittest.TestCase):
 
 
     def test_player_battle_swapitem(self):
-        a = dawdle.Player.new_player('a', 'b', 'c')
+        a = self.bot._players.new_player('a', 'b', 'c')
         a.level = 20
         a.amulet = 20
-        b = dawdle.Player.new_player('b', 'c', 'd')
+        b = self.bot._players.new_player('b', 'c', 'd')
         b.amulet = 40
         self.bot._overrides = {
             'pvp_player_roll': 20,
@@ -264,10 +280,10 @@ class TestPvPBattle(unittest.TestCase):
 
 
     def test_player_battle_finditem(self):
-        a = dawdle.Player.new_player('a', 'b', 'c')
+        a = self.bot._players.new_player('a', 'b', 'c')
         a.nick = 'a'
         a.amulet = 20
-        b = dawdle.Player.new_player('b', 'c', 'd')
+        b = self.bot._players.new_player('b', 'c', 'd')
         b.amulet = 40
         self.bot._overrides = {
             'pvp_player_roll': 20,
@@ -297,19 +313,19 @@ class TestTeamBattle(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        self.bot = dawdle.DawdleBot(None)
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
 
     def test_setup_insufficient_players(self):
-        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcde"]
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcde"]
         self.bot.team_battle(op)
         self.assertEqual(self.irc.chanmsgs, [])
 
 
     def test_win(self):
-        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcdef"]
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcdef"]
         op[0].amulet, op[0].nextlvl = 20, 1200
         op[1].amulet, op[1].nextlvl = 20, 3600
         op[2].amulet, op[2].nextlvl = 20, 3600
@@ -325,7 +341,7 @@ class TestTeamBattle(unittest.TestCase):
         self.assertEqual(self.irc.chanmsgs[0], "a, b, and c [60/60] have team battled d, e, and f [30/120] and won!  0 days, 00:04:00 is removed from their clocks.")
 
     def test_loss(self):
-        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcdef"]
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcdef"]
         op[0].amulet, op[0].nextlvl = 20, 1200
         op[1].amulet, op[1].nextlvl = 20, 3600
         op[2].amulet, op[2].nextlvl = 20, 3600
@@ -346,13 +362,13 @@ class TestEvilness(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
 
     def test_theft(self):
-        op = [dawdle.Player.new_player('a', 'b', 'c'), dawdle.Player.new_player('b', 'c', 'd')]
+        op = [self.bot._players.new_player('a', 'b', 'c'), self.bot._players.new_player('b', 'c', 'd')]
         op[0].alignment = 'e'
         op[1].alignment = 'g'
         op[1].amulet = 20
@@ -365,7 +381,7 @@ class TestEvilness(unittest.TestCase):
 
 
     def test_penalty(self):
-        op = [dawdle.Player.new_player('a', 'b', 'c')]
+        op = [self.bot._players.new_player('a', 'b', 'c')]
         op[0].alignment = 'e'
         self.bot._overrides = {
             'evilness_theft': False,
@@ -380,13 +396,13 @@ class TestGoodness(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
 
     def test_goodness(self):
-        op = [dawdle.Player.new_player('a', 'b', 'c'), dawdle.Player.new_player('b', 'c', 'd')]
+        op = [self.bot._players.new_player('a', 'b', 'c'), self.bot._players.new_player('b', 'c', 'd')]
         op[0].alignment = 'g'
         op[1].alignment = 'g'
         self.bot._overrides = {
@@ -408,13 +424,13 @@ class TestHandOfGod(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
 
     def test_forward(self):
-        op = [dawdle.Player.new_player('a', 'b', 'c')]
+        op = [self.bot._players.new_player('a', 'b', 'c')]
         self.bot._overrides = {
             'hog_effect': True,
             'hog_amount': 10
@@ -425,7 +441,7 @@ class TestHandOfGod(unittest.TestCase):
 
 
     def test_back(self):
-        op = [dawdle.Player.new_player('a', 'b', 'c')]
+        op = [self.bot._players.new_player('a', 'b', 'c')]
         self.bot._overrides = {
             'hog_effect': False,
             'hog_amount': 10
@@ -443,15 +459,16 @@ class TestQuest(unittest.TestCase):
         dawdle.conf['eventsfile'] = "events.txt"
         dawdle.conf['writequestfile'] = True
         dawdle.conf['questfilename'] = "testquestfile.txt"
-        self.bot = dawdle.DawdleBot(FakePlayerDB())
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
 
     def test_questing_mode_1(self):
-        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcd"]
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
         for p in op:
+            p.online = True
             p.level = 25
             p.lastlogin = now - 36001
         self.bot._overrides = {
@@ -459,7 +476,6 @@ class TestQuest(unittest.TestCase):
             "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
-        self.bot._players._online = op
         self.bot.quest_start()
         # time passes
         self.bot._quest.qtime = time.time() - 1
@@ -477,9 +493,10 @@ class TestQuest(unittest.TestCase):
 
     def test_questing_mode_2(self):
         dawdle.conf['mapurl'] = "https://example.com/"
-        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcd"]
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
         for p in op:
+            p.online = True
             p.level = 25
             p.lastlogin = now - 36001
         self.bot._overrides = {
@@ -508,10 +525,11 @@ class TestQuest(unittest.TestCase):
 
     def test_questing_failure(self):
         dawdle.conf['rppenstep'] = 1.14
-        op = [dawdle.Player.new_player(pname, 'a', 'b') for pname in "abcd"]
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         self.bot._players._online = op
         now = time.time()
         for p in op:
+            p.online = True
             p.nick = p.name
             p.level = 25
             p.lastlogin = now - 36001
@@ -520,7 +538,6 @@ class TestQuest(unittest.TestCase):
             "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
-        self.bot._players._online = op
         self.bot.quest_start()
         self.bot.penalize(op[0], 'logout')
 
@@ -535,6 +552,28 @@ class TestQuest(unittest.TestCase):
         self.assertEqual(op[2].nextlvl, 996)
         self.assertEqual(op[3].nextlvl, 996)
 
+class TestRPCheck(unittest.TestCase):
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        dawdle.conf['detectsplits'] = True
+        dawdle.conf['splitwait'] = 300
+        dawdle.conf['eventsfile'] = "events.txt"
+        dawdle.conf['writequestfile'] = True
+        dawdle.conf['questfilename'] = "testquestfile.txt"
+        dawdle.conf['self_clock'] = 1
+        dawdle.conf['mapx'] = 300
+        dawdle.conf['mapy'] = 300
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+    def test_rpcheck(self):
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
+        for p in op:
+            p.level = 25
+        self.bot._players._online = op
+        self.bot.rpcheck(0, 0)
 
 if __name__ == "__main__":
     unittest.main()
