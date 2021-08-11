@@ -1339,8 +1339,10 @@ class DawdleBot(object):
             self.notice(nick, "Sorry, character classes must be between 1 and 30 characters long.")
         elif pname[0] == "#":
             self.notice(nick, "Sorry, character names may not start with #.")
-        elif '\001' in pname:
-            self.notice(nick, "Sorry, character names may not include \\001.")
+        elif not pname.ispprintable():
+            self.notice(nick, "Sorry, character names may not include control codes.")
+        elif not pclass.isprintable():
+            self.notice(nick, "Sorry, character classes may not include control codes.")
         else:
             player = self._players.new_player(pname, pclass, ppass)
             player.online = True
