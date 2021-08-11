@@ -1019,11 +1019,11 @@ class DawdleBot(object):
         self._irc = None             # irc connection
         self._players = db           # the player database
         self._state = 'disconnected' # connected, disconnected, or ready
-        self._quest = None      # quest if any
-        self._qtimer = 0        # time until next quest
-        self._silence = set()     # can have 'chanmsg' or 'notice' to silence them
+        self._quest = None           # quest if any
+        self._qtimer = 0             # time until next quest
+        self._silence = set() # can have 'chanmsg' or 'notice' to silence them
         self._pause = False # prevents game events from happening when True
-
+        self._last_reg_time = 0
         self._overrides = {}
 
 
@@ -1306,7 +1306,11 @@ class DawdleBot(object):
                         "bot is in pause mode; please wait a few minutes and "
                         "try again.")
             return
-
+        now = time.time()
+        if now - self._last_reg_time < 1:
+            self.notice(nick, "Sorry, there have been too many registrations. Try again in a minute.")
+            return
+        self._last_reg_time = now
 
         parts = args.split(' ', 2)
         if len(parts) != 3:
