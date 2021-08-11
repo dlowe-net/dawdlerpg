@@ -612,6 +612,10 @@ class PlayerDB(object):
         return sorted(s, key=attrgetter('nextlvl'), reverse=True)[:3]
 
 
+    def inactive_since(self, expire):
+        return [p for p in self._players.values() if not p.online and p.lastlogin < expire]
+
+
 def first_setup():
     global conf
     global db
@@ -1424,12 +1428,25 @@ class DawdleBot(object):
 
     def cmd_delold(self, player, nick, args):
         """Remove players not accessed in a number of days."""
-        pass
+        if not re.match(r"\d+", args):
+            self.notice(nick, "Try DELOLD <# of days>")
+            return
+        days = int(args)
+        if days < 7:
+            self.notice(nick, "That seems a bit low.")
+            return
+        expire_time = int(time.time()) - days * 86400
+        old = [p.name for p in self._players.inactive_since(expire_time)]
+        for pname in old:
+            self._players.delete_player(pname)
+        self.chanmsg(f"{len(old)} account{plural(len(old), '', 's')} not accessed "
+                     f"in the last {days} days removed by {player.name}.")
 
 
     def cmd_die(self, player, nick, args):
         """Shut down the bot."""
         self.notice(nick, "Shutting down.")
+        self._irc.quit()
         sys.exit(0)
 
 
