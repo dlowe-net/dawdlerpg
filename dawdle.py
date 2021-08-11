@@ -1018,6 +1018,20 @@ class DawdleBot(object):
         self._state = 'connected'
 
 
+    def chanmsg(self, text):
+        self._irc.chanmsg(text)
+
+
+    def logchanmsg(self, text):
+        self._irc.chanmsg(text)
+        with open(conf['modsfile'], "a") as ouf:
+            ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
+
+
+    def notice(self, nick, text):
+        self._irc.notice(nick, text)
+
+
     def ready(self):
         self._state = 'ready'
         autologin = []
@@ -1029,11 +1043,11 @@ class DawdleBot(object):
                 p.lastlogin = time.time()
         self._players.write()
         if autologin:
-            self._irc.chanmsg(f"{len(autologin)} user{plural(len(autologin), '', 's')} automatically logged in; accounts: {', '.join(autologin)}")
+            self.chanmsg(f"{len(autologin)} user{plural(len(autologin), '', 's')} automatically logged in; accounts: {', '.join(autologin)}")
             if 'o' in self._irc.usermodes[self._irc._nick]:
                 self.acquired_ops()
         else:
-            self._irc.chanmsg("0 users qualified for auto login.")
+            self.chanmsg("0 users qualified for auto login.")
         self._rpcheck_task = asyncio.create_task(self.rpcheck_loop())
         self._qtimer = time.time() + self.randint('qtimer_init', 12, 24)*3600
 
@@ -1083,16 +1097,16 @@ class DawdleBot(object):
         player = self._players.from_nick(src)
         if cmd in DawdleBot.ALLOWPLAYERS:
             if not player:
-                self._irc.notice(src, "You are not logged in.")
+                self.notice(src, "You are not logged in.")
                 return
         elif cmd not in DawdleBot.ALLOWALL:
             if player is None or not player.isadmin:
-                self._irc.notice(src, f"You cannot do '{cmd}'.")
+                self.notice(src, f"You cannot do '{cmd}'.")
                 return
         if hasattr(self, f'cmd_{cmd}'):
             getattr(self, f'cmd_{cmd}')(player, src, args)
         else:
-            self._irc.notice(src, f"'{cmd} isn't actually a command.")
+            self.notice(src, f"'{cmd} isn't actually a command.")
 
 
     def channel_message(self, src, text):
@@ -1149,37 +1163,37 @@ class DawdleBot(object):
 
     def cmd_align(self, player, nick, args):
         if args not in ["good", "neutral", "evil"]:
-            self._irc.notice(nick, "Try: ALIGN good|neutral|evil")
+            self.notice(nick, "Try: ALIGN good|neutral|evil")
             return
         player.alignment = args[0]
-        self._irc.notice(nick, f"You have converted to {args}")
+        self.notice(nick, f"You have converted to {args}")
         self._players.write()
 
 
     def cmd_help(self, player, nick, args):
-        self._irc.notice(nick, "Help?  But we are dawdling!")
+        self.notice(nick, "Help?  But we are dawdling!")
 
 
     def cmd_version(self, player, nick, args):
-        self._irc.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe")
+        self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe")
 
 
     def cmd_whoami(self, player, nick, args):
-        self._irc.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
+        self.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
 
 
     def cmd_status(self, player, nick, args):
         if not conf['statuscmd']:
-            self._irc.notice(nick, "You cannot do 'status'.")
+            self.notice(nick, "You cannot do 'status'.")
             return
         if args == '':
             t = player
         elif args not in self._players:
-            self._irc.notice(nick, f"No such player '{args}'.")
+            self.notice(nick, f"No such player '{args}'.")
             return
         else:
             t = self._players[args]
-        self._irc.notice(nick,
+        self.notice(nick,
                          f"{t.name}: Level {t.level} {t.cclass}; "
                          f"Status: {'Online' if t.online else 'Offline'}; "
                          f"TTL: {duration(t.nextlvl)}; "
@@ -1189,22 +1203,22 @@ class DawdleBot(object):
 
     def cmd_login(self, player, nick, args):
         if player:
-            self._irc.notice(nick, f"Sorry, you are already online as {player.name}")
+            self.notice(nick, f"Sorry, you are already online as {player.name}")
             return
         if nick not in self._irc.userhosts:
-            self._irc.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
             return
 
         parts = args.split(' ', 1)
         if len(parts) != 2:
-            self._irc.notice(nick, "Try: LOGIN <username> <password>")
+            self.notice(nick, "Try: LOGIN <username> <password>")
             return
         pname, ppass = parts
         if pname not in self._players:
-            self._irc.notice(nick, f"Sorry, no such account name.  Note that account names are case sensitive.")
+            self.notice(nick, f"Sorry, no such account name.  Note that account names are case sensitive.")
             return
         if not self._players.check_login(pname, ppass):
-            self._irc.notice(nick, f"Wrong password.")
+            self.notice(nick, f"Wrong password.")
             return
         # Success!
         if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
@@ -1215,34 +1229,34 @@ class DawdleBot(object):
         player.userhost = self._irc.userhosts[nick]
         player.lastlogin = time.time()
         self._players.write()
-        self._irc.chanmsg(f"{player.name}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
-        self._irc.notice(nick, f"Logon successful. Next level in {duration(player.nextlvl)}.")
+        self.chanmsg(f"{player.name}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
+        self.notice(nick, f"Logon successful. Next level in {duration(player.nextlvl)}.")
 
 
     def cmd_register(self, player, nick, args):
         if player:
-            self._irc.notice(nick, f"Sorry, you are already online as {player.name}")
+            self.notice(nick, f"Sorry, you are already online as {player.name}")
             return
         if nick not in self._irc.userhosts:
-            self._irc.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
             return
 
         parts = args.split(' ', 2)
         if len(parts) != 3:
-            self._irc.notice(nick, "Try: REGISTER <username> <password> <char class>")
-            self._irc.notice(nick, "i.e. REGISTER Poseidon MyPassword God of the Sea")
+            self.notice(nick, "Try: REGISTER <username> <password> <char class>")
+            self.notice(nick, "i.e. REGISTER Poseidon MyPassword God of the Sea")
             return
         pname, ppass, pclass = parts
         if pname in self._players:
-            self._irc.notice(nick, "Sorry, that character name is already in use.")
+            self.notice(nick, "Sorry, that character name is already in use.")
         elif pname == self._irc._nick or pname == conf['botnick']:
-            self._irc.notice(nick, "That character name cannot be registered.")
+            self.notice(nick, "That character name cannot be registered.")
         elif len(pname) > 16:
-            self._irc.notice(nick, "Sorry, character names must be between 1 and 16 characters long.")
+            self.notice(nick, "Sorry, character names must be between 1 and 16 characters long.")
         elif len(pclass) > 30:
-            self._irc.notice(nick, "Sorry, character classes must be between 1 and 30 characters long.")
+            self.notice(nick, "Sorry, character classes must be between 1 and 30 characters long.")
         elif '\001' in pname:
-            self._irc.notice(nick, "Sorry, character names may not include \\001.")
+            self.notice(nick, "Sorry, character names may not include \\001.")
         else:
             player = self._players.new_player(pname, pclass, ppass)
             player.online = True
@@ -1250,19 +1264,19 @@ class DawdleBot(object):
             player.userhost = self._irc.userhosts[nick]
             if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
                 self._irc.mode(conf['botchan'], "+v", nick)
-            self._irc.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
-            self._irc.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
-            self._irc.notice(nick, "NOTE: The point of the game is to see who can idle the longest. As such, talking in the channel, parting, quitting, and changing nicks all penalize you.")
+            self.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
+            self.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
+            self.notice(nick, "NOTE: The point of the game is to see who can idle the longest. As such, talking in the channel, parting, quitting, and changing nicks all penalize you.")
 
 
     def cmd_removeme(self, player, nick, args):
         if args == "":
-            self._irc.notice(nick, "Try: REMOVEME <password>")
+            self.notice(nick, "Try: REMOVEME <password>")
         elif not self._players.check_login(player.name, args):
-            self._irc.notice(nick, "Wrong password.")
+            self.notice(nick, "Wrong password.")
         else:
-            self._irc.notice(nick, f"Account {player.name} removed.")
-            self._irc.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
+            self.notice(nick, f"Account {player.name} removed.")
+            self.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
             self._players.delete_player(player.name)
             if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
                 self._irc.mode(conf['botchan'], "-v", nick)
@@ -1271,17 +1285,17 @@ class DawdleBot(object):
     def cmd_newpass(self, player, nick, args):
         parts = args.split(' ', 1)
         if len(parts) != 2:
-            self._irc.notice(nick, "Try: NEWPASS <old password> <new password>")
+            self.notice(nick, "Try: NEWPASS <old password> <new password>")
         elif not self._players.check_login(player.name, parts[0]):
-            self._irc.notice(nick, "Wrong password.")
+            self.notice(nick, "Wrong password.")
         else:
             player.set_password(parts[1])
             self._players.write()
-            self._irc.notice(nick, "Your password was changed.")
+            self.notice(nick, "Your password was changed.")
 
 
     def cmd_logout(self, player, nick, args):
-        self._irc.notice(nick, "You have been logged out.")
+        self.notice(nick, "You have been logged out.")
         player.online = False
         player.lastlogin = time.time()
         self._players.write()
@@ -1299,65 +1313,65 @@ class DawdleBot(object):
         """Change another player's character class."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
-            self._irc.notice(nick, "Try: CHCLASS <account> <new class>")
+            self.notice(nick, "Try: CHCLASS <account> <new class>")
         elif parts[0] not in self._players:
-            self._irc.notice(nick, f"{parts[0]} is not a valid account.")
+            self.notice(nick, f"{parts[0]} is not a valid account.")
         else:
             self._players[parts[0]].cclass = parts[1]
-            self._irc.notice(nick, f"{parts[0]}'s character class is now '{parts[1]}'.")
+            self.notice(nick, f"{parts[0]}'s character class is now '{parts[1]}'.")
 
 
     def cmd_chpass(self, player, nick, args):
         """Change another player's password."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
-            self._irc.notice(nick, "Try: CHPASS <account> <new password>")
+            self.notice(nick, "Try: CHPASS <account> <new password>")
         elif parts[0] not in self._players:
-            self._irc.notice(nick, f"{parts[0]} is not a valid account.")
+            self.notice(nick, f"{parts[0]} is not a valid account.")
         else:
             self._players[parts[0]].set_password(parts[1])
-            self._irc.notice(nick, f"{parts[0]}'s password changed.")
+            self.notice(nick, f"{parts[0]}'s password changed.")
 
 
     def cmd_chuser(self, player, nick, args):
         """Change someone's username."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
-            self._irc.notice(nick, "Try: CHPASS <account> <new account name>")
+            self.notice(nick, "Try: CHPASS <account> <new account name>")
         elif parts[0] not in self._players:
-            self._irc.notice(nick, f"{parts[0]} is not a valid account.")
+            self.notice(nick, f"{parts[0]} is not a valid account.")
         else:
             self._players.rename_player(parts[0], parts[1])
-            self._irc.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
+            self.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
 
 
     def cmd_clearq(self, player, nick, args):
         """Clear outgoing message queue."""
         self._irc._writeq = []
-        self._irc.notice(nick, "Output queue cleared.")
+        self.notice(nick, "Output queue cleared.")
 
 
     def cmd_del(self, player, nick, args):
         """Delete another player's account."""
         if args not in self._players:
-            self._irc.notice(nick, f"{args} is not a valid account.")
+            self.notice(nick, f"{args} is not a valid account.")
         else:
             self._players.delete_player(args)
-            self._irc.notice(nick, f"{args} has been deleted.")
+            self.notice(nick, f"{args} has been deleted.")
 
 
     def cmd_deladmin(self, player, nick, args):
         """Remove admin authority."""
         if args not in self._players:
-            self._irc.notice(nick, f"{args} is not a valid account.")
+            self.notice(nick, f"{args} is not a valid account.")
         elif not self._players[args].isadmin:
-            self._irc.notice(nick, f"{args} is already not an admin.")
+            self.notice(nick, f"{args} is already not an admin.")
         elif args == conf['owner']:
-            self._irc.notice(nick, f"You can't do that.")
+            self.notice(nick, f"You can't do that.")
         else:
             self._players[args].isadmin = False
             self._db.write()
-            self._irc.notice(nick, f"{args} is no longer an admin.")
+            self.notice(nick, f"{args} is no longer an admin.")
 
 
     def cmd_delold(self, player, nick, args):
@@ -1367,7 +1381,7 @@ class DawdleBot(object):
 
     def cmd_die(self, player, nick, args):
         """Shut down the bot."""
-        self._irc.notice(nick, "Shutting down.")
+        self.notice(nick, "Shutting down.")
         sys.exit(0)
 
 
@@ -1384,22 +1398,22 @@ class DawdleBot(object):
     def cmd_mkadmin(self, player, nick, args):
         """Grant admin authority to player."""
         if args not in self._players:
-            self._irc.notice(nick, f"{args} is not a valid account.")
+            self.notice(nick, f"{args} is not a valid account.")
         elif self._players[args].isadmin:
-            self._irc.notice(nick, f"{args} is already an admin.")
+            self.notice(nick, f"{args} is already an admin.")
         else:
             self._players[args].isadmin = True
             self._db.write()
-            self._irc.notice(nick, f"{args} is now an admin.")
+            self.notice(nick, f"{args} is now an admin.")
 
 
     def cmd_pause(self, player, nick, args):
         """Toggle pause mode."""
         pause_mode = not pause_mode
         if pause_mode:
-            self._irc.notice(nick, "Pause mode enabled.")
+            self.notice(nick, "Pause mode enabled.")
         else:
-            self._irc.notice(nick, "Pause mode disabled.")
+            self.notice(nick, "Pause mode disabled.")
 
 
     def cmd_rehash(self, player, nick, args):
@@ -1421,9 +1435,9 @@ class DawdleBot(object):
         """Set silent mode."""
         silent_mode = not silent_mode
         if silent_mode:
-            self._irc.notice(nick, "Silent mode enabled.")
+            self.notice(nick, "Silent mode enabled.")
         else:
-            self._irc.notice(nick, "Silent mode disabled.")
+            self.notice(nick, "Silent mode disabled.")
 
 
     def cmd_hog(self, player, nick, args):
@@ -1433,28 +1447,28 @@ class DawdleBot(object):
     def cmd_push(self, player, nick, args):
         parts = args.split(' ')
         if len(parts) != 2 or not re.match(r'[+-]?\d+', parts[1]):
-            self._irc.notice(nick, "Try: PUSH <char name> <seconds>")
+            self.notice(nick, "Try: PUSH <char name> <seconds>")
             return
         if parts[0] not in self._players:
-            self._irc.notice(nick, f"No such username {parts[0]}.")
+            self.notice(nick, f"No such username {parts[0]}.")
             return
         player = self._players[parts[0]]
         amount = int(parts[1])
         if amount == 0:
-            self._irc.notice(nick, "That would not be interesting.")
+            self.notice(nick, "That would not be interesting.")
             return
 
         if amount > player.nextlvl:
-            self._irc.notice(nick,
-                             f"Time to level for {player.name} ({player.nextlvl}s) "
-                             f"is lower than {amount}; setting TTL to 0.")
+            self.notice(nick,
+                        f"Time to level for {player.name} ({player.nextlvl}s) "
+                        f"is lower than {amount}; setting TTL to 0.")
             amount = player.nextlvl
         player.nextlvl -= amount
         direction = 'towards' if amount > 0 else 'away from'
-        self._irc.notice(nick, f"{player.name} now reaches level {player.level + 1} in {duration(player.nextlvl)}.")
-        self._irc.chanmsg(f"{nick} has pushed {player.name} {abs(amount)} seconds {direction} "
-                          f"level {player.level + 1}.  {player.name} reaches next level "
-                          f"in {duration(player.nextlvl)}.")
+        self.notice(nick, f"{player.name} now reaches level {player.level + 1} in {duration(player.nextlvl)}.")
+        self.logchanmsg(f"{nick} has pushed {player.name} {abs(amount)} seconds {direction} "
+                        f"level {player.level + 1}.  {player.name} reaches next level "
+                        f"in {duration(player.nextlvl)}.")
 
 
     def cmd_trigger(self, player, nick, args):
@@ -1477,10 +1491,10 @@ class DawdleBot(object):
 
     def cmd_quest(self, player, nick, args):
         if self._quest is None:
-            self._irc.notice(nick, "There is no active quest.")
+            self.notice(nick, "There is no active quest.")
         elif self._quest.mode == 1:
             qp = quest.questors
-            self._irc.notice(nick,
+            self.notice(nick,
                              f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                              f"are on a quest to {quest.text}. Quest to complete in "
                              f"{duration(quest.qtime - time.time())}.")
@@ -1489,7 +1503,7 @@ class DawdleBot(object):
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
-            self._irc.notice(nick,
+            self.notice(nick,
                              f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                              f"are on a quest to {quest.text}. Participants must first reach "
                              f"({quest.dests[0][0]}, {quest.dests[0][1]}), then "
@@ -1498,12 +1512,11 @@ class DawdleBot(object):
 
     def penalize(self, player, kind, text=None):
         if self._quest and player in self._quest.questors:
-            self._irc.chanmsg(player.name + "'s cowardice has brought the wrath of the gods "
-                              "down upon them.  All their great wickedness makes "
-                              "them heavy with lead, and to tend downwards with "
-                              "great weight and pressure towards hell. Therefore "
-                              "have they drawn themselves 15 steps closer to that "
-                              "gaping maw.")
+            self.logchanmsg(player.name + "'s insolence has brought the wrath of "
+                            "the gods down upon them.  Your great wickedness "
+                            "burdens you like lead, drawing you downwards with "
+                            "great force towards hell. Thereby have you plunged "
+                            "15 steps closer to that gaping maw.")
             for p in self._players.online():
                 gain = int(15 * (conf['rppenstep'] ** p.level))
                 p.penquest += gain
@@ -1521,7 +1534,7 @@ class DawdleBot(object):
         setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
         player.nextlvl += penalty
         if kind != 'quit':
-            self._irc.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
+            self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
 
     def expire_splits(self):
         expiration = time.time() - conf['splitwait']
@@ -1584,16 +1597,16 @@ class DawdleBot(object):
         if now % 36000 == 0:
             top = self._players.top_players()
             if top:
-                self._irc.chanmsg("Idle RPG Top Players:")
+                self.chanmsg("Idle RPG Top Players:")
                 for i, p in zip(itertools.count(), top):
-                    self._irc.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
-                                      f"Next level in {duration(p.nextlvl)}.")
+                    self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
+                                 f"Next level in {duration(p.nextlvl)}.")
         if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
             self.challenge_op()
         if now % 3600 == 0 and self._irc._nick != conf['botnick']:
             self._irc.send(conf['botghostcmd'])
         if now % 600 == 0 and pause_mode:
-            self._irc.chanmsg("WARNING: Cannot write database in PAUSE mode!")
+            self.chanmsg("WARNING: Cannot write database in PAUSE mode!")
 
         for player in op:
             player.nextlvl -= passed
@@ -1606,7 +1619,7 @@ class DawdleBot(object):
                 else:
                     player.nextlvl = int(conf['rpbase'] * (conf['rpstep'] ** player.level))
 
-                self._irc.chanmsg(f"{player.name}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{player.name}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
                 # Players below level 25 have fewer battles.
                 if player.level >= 25 or self.randomly('lowlevel_battle', 4):
@@ -1617,12 +1630,12 @@ class DawdleBot(object):
         player = self.randchoice('hog_player', op)
         amount = int(player.nextlvl * (5 + self.randint('hog_amount', 0, 71))/100)
         if self.randomly('hog_effect', 5):
-            self._irc.chanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {player.name} {duration(amount)} toward level {player.level + 1}.")
+            self.logchanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {player.name} {duration(amount)} toward level {player.level + 1}.")
             player.nextlvl -= amount
         else:
-            self._irc.chanmsg(f"Thereupon He stretched out His little finger among them and consumed {player.name} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
+            self.logchanmsg(f"Thereupon He stretched out His little finger among them and consumed {player.name} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
             player.nextlvl += amount
-        self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+        self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
         self._players.write()
 
 
@@ -1656,7 +1669,7 @@ class DawdleBot(object):
             if player.level >= si.minlvl and self.randomly('specitem_find', 40):
                 ilvl = si.itemlvl + self.randint('specitem_level', 0, si.lvlspread)
                 player.acquire_item(si.kind, ilvl, si.name)
-                self._irc.notice(player.nick,
+                self.notice(player.nick,
                                  f"The light of the gods shines down upon you! You have "
                                  f"found the level {ilvl} {si.name}!  {si.flavor}")
                 return
@@ -1672,14 +1685,14 @@ class DawdleBot(object):
                     level = num
         old_level = int(getattr(player, item))
         if level > old_level:
-            self._irc.notice(player.nick,
+            self.notice(player.nick,
                              f"You found a level {level} {Player.ITEMDESC[item]}! "
                              f"Your current {Player.ITEMDESC[item]} is only "
                              f"level {old_level}, so it seems Luck is with you!")
             player.acquire_item(item, level)
             self._players.write()
         else:
-            self._irc.notice(player.nick,
+            self.notice(player.nick,
                              f"You found a level {level} {Player.ITEMDESC[item]}. "
                              f"Your current {Player.ITEMDESC[item]} is level {old_level}, "
                              f"so it seems Luck is against you.  You toss the {Player.ITEMDESC[item]}.")
@@ -1699,41 +1712,41 @@ class DawdleBot(object):
         if playerroll >= opproll:
             gain = 20 if opp is None else max(7, int(opp.level / 4))
             amount = int((gain / 100)*player.nextlvl)
-            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
-                              f"{oppname} [{opproll}/{oppsum}] {flavor_win}! "
-                              f"{duration(amount)} is removed from {player.name}'s clock.")
+            self.logchanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
+                            f"{oppname} [{opproll}/{oppsum}] {flavor_win}! "
+                            f"{duration(amount)} is removed from {player.name}'s clock.")
             player.nextlvl -= amount
             if player.nextlvl > 0:
-                self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
             if opp is not None:
                 if self.randomly('pvp_critical', {'g': 50, 'n': 35, 'e': 20}[player.alignment]):
                     penalty = int(((5 + self.randint('pvp_cs_penalty_pct', 0, 20))/100 * opp.nextlvl))
-                    self._irc.chanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
-                                      f"{duration(penalty)} is added to {opp.name}'s clock.")
+                    self.logchanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
+                                    f"{duration(penalty)} is added to {opp.name}'s clock.")
                     opp.nextlvl += penalty
-                    self._irc.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
+                    self.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
                 elif player.level > 19 and self.randomly('pvp_swap_item', 25):
                     item = self.randchoice('pvp_swap_itemtype', Player.ITEMS)
                     playeritem = getattr(player, item)
                     oppitem = getattr(opp, item)
                     if oppitem > playeritem:
-                        self._irc.chanmsg(f"In the fierce battle, {opp.name} dropped their level "
-                                          f"{oppitem} {Player.ITEMDESC[item]}! {player.name} picks it up, tossing "
-                                          f"their old level {playeritem} {Player.ITEMDESC[item]} to {opp.name}.")
+                        self.logchanmsg(f"In the fierce battle, {opp.name} dropped their level "
+                                        f"{oppitem} {Player.ITEMDESC[item]}! {player.name} picks it up, tossing "
+                                        f"their old level {playeritem} {Player.ITEMDESC[item]} to {opp.name}.")
                         player.swap_items(opp, item)
         else:
             # Losing
             loss = 10 if opp is None else max(7, int(opp.level / 7))
             amount = int((loss / 100)*player.nextlvl)
-            self._irc.chanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
-                              f"{oppname} [{opproll}/{oppsum}] {flavor_loss}! {duration(amount)} is "
-                              f"added to {player.name}'s clock.")
+            self.logchanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
+                            f"{oppname} [{opproll}/{oppsum}] {flavor_loss}! {duration(amount)} is "
+                            f"added to {player.name}'s clock.")
             player.nextlvl += amount
-            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
         if self.randomly('pvp_find_item', {'g': 50, 'n': 67, 'e': 100}[player.alignment]):
-            self._irc.chanmsg(f"While recovering from battle, {player.name} notices a glint "
-                              f"in the mud. Upon investigation, they find an old lost item!")
+            self.chanmsg(f"While recovering from battle, {player.name} notices a glint "
+                         f"in the mud. Upon investigation, they find an old lost item!")
             self.find_item(player)
 
 
@@ -1755,15 +1768,15 @@ class DawdleBot(object):
         roll_a = self.randint('team_a_roll', 0, team_a)
         roll_b = self.randint('team_b_roll', 0, team_b)
         if roll_a >= roll_b:
-            self._irc.chanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
-                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
-                              f"[{roll_b}/{team_b}] and won!  {duration(gain)} is removed from their clocks.")
+            self.logchanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
+                            f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
+                            f"[{roll_b}/{team_b}] and won!  {duration(gain)} is removed from their clocks.")
             for p in op[0:3]:
                 p.nextlvl -= gain
         else:
-            self._irc.chanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
-                              f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
-                              f"[{roll_b}/{team_b}] and lost!  {duration(gain)} is added to their clocks.")
+            self.logchanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
+                            f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
+                            f"[{roll_b}/{team_b}] and lost!  {duration(gain)} is added to their clocks.")
             for p in op[0:3]:
                 p.nextlvl += gain
 
@@ -1796,7 +1809,7 @@ class DawdleBot(object):
                 msg = f"{player.name}'s shield was damaged by a dragon's fiery breath!"
             elif item == "boots":
                 msg = f"{player.name} stepped in some hot lava!"
-            self._irc.chanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} loses 10% of its effectiveness.")
+            self.logchanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} loses 10% of its effectiveness.")
             setattr(player, item, int(getattr(player, item) * 0.9))
             return
 
@@ -1807,10 +1820,10 @@ class DawdleBot(object):
         with open(conf['eventsfile']) as inf:
             lines = [line.rstrip() for line in inf.readlines() if line.startswith("C ")]
         action = self.randchoice('calamity_action', lines)[2:]
-        self._irc.chanmsg(f"{player.name} {action}! This terrible calamity has slowed them "
-                          f"{duration(amount)} from level {player.level + 1}.")
+        self.logchanmsg(f"{player.name} {action}! This terrible calamity has slowed them "
+                        f"{duration(amount)} from level {player.level + 1}.")
         if player.nextlvl > 0:
-            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
     def godsend(self):
@@ -1842,7 +1855,7 @@ class DawdleBot(object):
             elif item == "boots":
                 msg = f"A sorceror enchanted {player.name}'s boots with Swiftness!"
 
-            self._irc.chanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} gains 10% effectiveness.")
+            self.logchanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} gains 10% effectiveness.")
             setattr(player, item, int(getattr(player, item) * 1.1))
             return
 
@@ -1853,10 +1866,10 @@ class DawdleBot(object):
         with open(conf['eventsfile']) as inf:
             lines = [line.rstrip() for line in inf.readlines() if line.startswith("G ")]
         action = self.randchoice('godsend_action', lines)[2:]
-        self._irc.chanmsg(f"{player.name} {action}! This wondrous godsend has accelerated them "
-                          f"{duration(amount)} towards level {player.level + 1}.")
+        self.logchanmsg(f"{player.name} {action}! This wondrous godsend has accelerated them "
+                        f"{duration(amount)} towards level {player.level + 1}.")
         if player.nextlvl > 0:
-            self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
     def evilness(self, op):
@@ -1871,22 +1884,22 @@ class DawdleBot(object):
             item = self.randchoice('evilness_item', Player.ITEMS)
             if getattr(player, item) < getattr(target, item):
                 player.swap_items(target, item)
-                self._irc.chanmsg(f"{player.name} stole {target.name}'s level {getattr(player, item)} "
-                                  f"{Player.ITEMDESC[item]} while they were sleeping!  {player.name} "
-                                  f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
-                                  f"behind, which {target.name} then takes.")
+                self.logchanmsg(f"{player.name} stole {target.name}'s level {getattr(player, item)} "
+                                f"{Player.ITEMDESC[item]} while they were sleeping!  {player.name} "
+                                f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
+                                f"behind, which {target.name} then takes.")
             else:
-                self._irc.notice(player.nick,
-                                 f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
-                                 f"but realized it was lower level than your own.  You creep "
-                                 f"back into the shadows.")
+                self.notice(player.nick,
+                            f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
+                            f"but realized it was lower level than your own.  You creep "
+                            f"back into the shadows.")
         else:
             amount = int(player.nextlvl * self.randint('evilness_penalty_pct', 1,6) / 100)
             player.nextlvl += amount
-            self._irc.chanmsg(f"{player.name} is forsaken by their evil god. {duration(amount)} is "
+            self.logchanmsg(f"{player.name} is forsaken by their evil god. {duration(amount)} is "
                               f"added to their clock.")
             if player.nextlvl > 0:
-                self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
     def goodness(self, op):
         good_p = [p for p in op if p.alignment == 'g']
@@ -1894,14 +1907,14 @@ class DawdleBot(object):
             return
         players = self.randsample('goodness_players', good_p, 2)
         gain = self.randint('goodness_gain_pct', 5, 13)
-        self._irc.chanmsg(f"{players[0].name} and {players[1].name} have not let the iniquities "
-                          f"of evil people poison them. Together have they prayed to their god, "
-                          f"and light now shines down upon them. {gain}% of their time is removed "
-                          f"from their clocks.")
+        self.logchanmsg(f"{players[0].name} and {players[1].name} have not let the iniquities "
+                        f"of evil people poison them. Together have they prayed to their god, "
+                        f"and light now shines down upon them. {gain}% of their time is removed "
+                        f"from their clocks.")
         for player in players:
             player.nextlvl = int(player.nextlvl * (1 - gain / 100))
             if player.nextlvl > 0:
-                self._irc.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
 
 
     def move_players(self):
@@ -1944,7 +1957,7 @@ class DawdleBot(object):
             if (p.posx, p.posy) in combatants:
                 combatant = combatants[(p.posx, p.posy)]
                 if combatant.isadmin and self.randomly('move_player_bow', 100):
-                    self._irc.chanmsg(f"{p.name} encounters {combatant.name} and bows humbly.")
+                    self.chanmsg(f"{p.name} encounters {combatant.name} and bows humbly.")
                 elif self.randomly('move_player_combat', len(op)):
                     self.pvp_battle(p, combatant,
                                     'come upon',
@@ -1975,7 +1988,7 @@ class DawdleBot(object):
             self._quest.mode = 1
             self._quest.text = match[2]
             self._quest.qtime = time.time() + quest_time
-            self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+            self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
                               f"been chosen by the gods to {self._quest.text}.  Quest to end in "
                               f"{duration(quest_time)}.")
         elif match[1] == '2':
@@ -1986,10 +1999,10 @@ class DawdleBot(object):
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
-            self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
-                              f"been chosen by the gods to {self._quest.text}.  Participants must first "
-                              f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
-                              f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
+            self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+                         f"been chosen by the gods to {self._quest.text}.  Participants must first "
+                         f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
+                         f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
 
 
     def quest_check(self, now):
@@ -1999,9 +2012,9 @@ class DawdleBot(object):
         elif self._quest.mode == 1:
             if now >= self._quest.qtime:
                 qp = self._quest.questors
-                self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                  f"have blessed the realm by completing their quest! 25% of "
-                                  f"their burden is eliminated.")
+                self.logchanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                f"have blessed the realm by completing their quest! 25% of "
+                                f"their burden is eliminated.")
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
                 self._quest = None
@@ -2020,14 +2033,14 @@ class DawdleBot(object):
                 qp = self._quest.questors
                 dests_left = len(self._quest.dests) - self._quest.stage + 1
                 if dests_left > 0:
-                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                      f"have reached a landmark on their journey! {dests_left} "
-                                      f"landmark{plural(dests_left, '', 's')} "
-                                      f"remain{plural(dests_left, 's', '')}.")
+                    self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                 f"have reached a landmark on their journey! {dests_left} "
+                                 f"landmark{plural(dests_left, '', 's')} "
+                                 f"remain{plural(dests_left, 's', '')}.")
                 else:
-                    self._irc.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                                      f"have completed their journey! 25% of "
-                                      f"their burden is eliminated.")
+                    self.logchanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                                    f"have completed their journey! 25% of "
+                                    f"their burden is eliminated.")
                     for q in qp:
                         q.nextlvl = int(q.nextlvl * 0.75)
                     self._quest = None

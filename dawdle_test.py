@@ -166,6 +166,7 @@ class TestPvPBattle(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['modsfile'] = 'modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -313,6 +314,7 @@ class TestTeamBattle(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['modsfile'] = 'modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -362,6 +364,7 @@ class TestEvilness(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['modsfile'] = 'modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -396,6 +399,7 @@ class TestGoodness(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['modsfile'] = 'modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -542,7 +546,7 @@ class TestQuest(unittest.TestCase):
 
         self.assertListEqual(self.irc.chanmsgs, [
             "a, b, c, and d have been chosen by the gods to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu.  Quest to end in 0 days, 12:00:00.",
-            "a's cowardice has brought the wrath of the gods down upon them.  All their great wickedness makes them heavy with lead, and to tend downwards with great weight and pressure towards hell. Therefore have they drawn themselves 15 steps closer to that gaping maw."
+            "a's insolence has brought the wrath of the gods down upon them.  Your great wickedness burdens you like lead, drawing you downwards with great force towards hell. Thereby have you plunged 15 steps closer to that gaping maw."
         ])
         self.assertListEqual(self.irc.notices['a'],
                              ["Penalty of 0 days, 00:08:40 added to your timer for LOGOUT command."])
