@@ -26,6 +26,7 @@ import random
 import re
 import sqlite3
 import sys
+import textwrap
 import time
 
 from hmac import compare_digest as compare_hash
@@ -838,6 +839,8 @@ class IRCClient:
         """ERR_NICKNAME_IN_USE - try another nick"""
         self._nick = self._nick + "0"
         self.nick(self._nick)
+        if 'botghostcmd' in conf:
+            self.send(conf['botghostcmd'])
 
 
     def handle_join(self, msg):
@@ -939,7 +942,8 @@ class IRCClient:
 
 
     def notice(self, target, text):
-        self.send(f"NOTICE {target} :{text}")
+        for line in textwrap.wrap(text, width=400):
+            self.send(f"NOTICE {target} :{line}")
 
 
     def mode(self, target, *modeinfo):
@@ -948,7 +952,8 @@ class IRCClient:
 
 
     def chanmsg(self, text):
-        self.send(f"PRIVMSG {conf['botchan']} :{text}")
+        for line in textwrap.wrap(text, width=400):
+            self.send(f"PRIVMSG {conf['botchan']} :{line}")
 
 
     def who(self, chan):
@@ -1603,8 +1608,6 @@ class DawdleBot(object):
                                  f"Next level in {duration(p.nextlvl)}.")
         if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
             self.challenge_op()
-        if now % 3600 == 0 and self._irc._nick != conf['botnick']:
-            self._irc.send(conf['botghostcmd'])
         if now % 600 == 0 and pause_mode:
             self.chanmsg("WARNING: Cannot write database in PAUSE mode!")
 
