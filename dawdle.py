@@ -374,7 +374,7 @@ class IdleRPGPlayerStore(PlayerStore):
                 for i in Player.ITEMS:
                     d[i], d[i+'name'] = self.code_to_item(d[i])
                 # convert int fields
-                for f in ["nextlvl", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
+                for f in ["level", "nextlvl", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
                     d[f] = int(d[f])
                 # convert boolean fields
                 for f in ["isadmin", "online"]:
@@ -976,8 +976,40 @@ class DawdleBot(object):
     # Commands in ALLOWALL can be used by anyone.
     # Commands in ALLOWPLAYERS can only be used by logged-in players
     # All other commands are admin-only
-    ALLOWALL = ["help", "login", "register", "quest", "version"]
+    ALLOWALL = ["help", "info", "login", "register", "quest", "version"]
     ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
+    CMDHELP = {
+        "help": "help [<command>] - Display help on commands.",
+        "login": "login <account> <password> - Login to your account.",
+        "register": "register <account> <password> <character class> - Create a new character.",
+        "quest": "quest - Display the current quest, if any.",
+        "version": "Display the version of the bot.",
+        "align": "align good|neutral|evil - Change your character's alignment.",
+        "logout": "logout - Log out of your account.  You will be penalized!",
+        "newpass": "newpass <old password> <new password> - Change your account's password.",
+        "removeme": "removeme <password> - Delete your character.",
+        "status": "status - Show bot status.",
+        "whoami": "whoami - Shows who you are logged in as.",
+        "backup": "backup - Backup the player db.",
+        "chclass": "chclass <account> <new class> - Change the character class of the account.",
+        "chpass": "chpass <account> <new password> - Change the password of the account.",
+        "chuser": "chuser <account> <new name> - Change the name of the account.",
+        "clearq": "clearq - Clear the sending queue of the bot.",
+        "del": "del <account> - Delete the account.",
+        "deladmin": "deladmin <account> - Remove admin privileges from account.",
+        "delold": "delold <# of days> - Remove all accounts older than a number of days.",
+        "die": "die - Shut down the bot.",
+        "jump": "jump <server> - Switch to a different IRC server.",
+        "mkadmin": "mkadmin <account> - Grant admin privileges to the account.",
+        "pause": "pause - Toggle pause mode.",
+        "rehash": "rehash - Not sure.",
+        "reloaddb": "reloaddb - Reload the player database.",
+        "restart": "restart - Restarts the bot.",
+        "silent": "silent <mode> - Sets silentmode to the given mode.",
+        "hog": "hog - Triggers the Hand of God.",
+        "push": "push <account> <seconds> - Adds seconds to the next level of account.",
+        "trigger": "trigger calamity|godsend|hog|teambattle|evilness|goodness|battle: Triggers the event."
+    }
 
     def __init__(self, db):
         self._irc = None             # irc connection
@@ -1176,7 +1208,17 @@ class DawdleBot(object):
 
 
     def cmd_help(self, player, nick, args):
-        self.notice(nick, "Help?  But we are dawdling!")
+        if args:
+            if args in DawdleBot.CMDHELP:
+                self.notice(nick, DawdleBot.CMDHELP[args])
+                return
+            self.notice(nick, f"{args} is not a command you can get help on.")
+        if not player:
+            self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWALL)}")
+        elif not player.isadmin:
+            self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWPLAYERS)}")
+        else:
+            self.notice(nick, f"Available commands: {','.join(sorted(DawdleBot.CMDHELP.keys()))}")
 
 
     def cmd_version(self, player, nick, args):
@@ -1199,11 +1241,11 @@ class DawdleBot(object):
         else:
             t = self._players[args]
         self.notice(nick,
-                         f"{t.name}: Level {t.level} {t.cclass}; "
-                         f"Status: {'Online' if t.online else 'Offline'}; "
-                         f"TTL: {duration(t.nextlvl)}; "
-                         f"Idled: {duration(t.idled)}; "
-                         f"Item sum: {t.itemsum()}")
+                    f"{t.name}: Level {t.level} {t.cclass}; "
+                    f"Status: {'Online' if t.online else 'Offline'}; "
+                    f"TTL: {duration(t.nextlvl)}; "
+                    f"Idled: {duration(t.idled)}; "
+                    f"Item sum: {t.itemsum()}")
 
 
     def cmd_login(self, player, nick, args):
