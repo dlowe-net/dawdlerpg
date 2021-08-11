@@ -1624,6 +1624,9 @@ class DawdleBot(object):
 
 
     def penalize(self, player, kind, text=None):
+        if PENALTIES[kind] == 0:
+            return
+
         if self._quest and player in self._quest.questors:
             self.logchanmsg(player.name + "'s insolence has brought the wrath of "
                             "the gods down upon them.  Your great wickedness "
