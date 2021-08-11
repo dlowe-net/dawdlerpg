@@ -1466,11 +1466,16 @@ class DawdleBot(object):
 
     def cmd_rehash(self, player, nick, args):
         """Re-read configuration file."""
-        pass
+        global conf
+        conf = read_config("irpg.conf")
+        self.notice(nick, "Configuration reloaded.")
 
 
     def cmd_reloaddb(self, player, nick, args):
         """Reload the player database."""
+        if not self._pause:
+            self.notice(nick, "ERROR: can only use RELOADDB while in PAUSE mode.")
+            return
         self._db.load()
 
 
