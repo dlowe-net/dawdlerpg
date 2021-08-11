@@ -1307,6 +1307,8 @@ class DawdleBot(object):
             self.notice(nick, "Sorry, character names must be between 1 and 16 characters long.")
         elif len(pclass) > 30:
             self.notice(nick, "Sorry, character classes must be between 1 and 30 characters long.")
+        elif pname[0] == "#":
+            self.notice(nick, "Sorry, character names may not start with #.")
         elif '\001' in pname:
             self.notice(nick, "Sorry, character names may not include \\001.")
         else:
