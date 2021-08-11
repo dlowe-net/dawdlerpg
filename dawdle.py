@@ -194,6 +194,7 @@ class Player(object):
 
     @staticmethod
     def new_player(pname, pclass, ppass):
+        now = int(time.time())
         p = Player()
         # name of account
         p.name = pname
@@ -234,9 +235,9 @@ class Player(object):
         # Total penalties from using the logout command
         p.penlogout = 0
         # Time created
-        p.created = time.time()
+        p.created = now
         # Last time logged in
-        p.lastlogin = time.time()
+        p.lastlogin = now
         # Character alignment - should only be n, g, or e
         p.alignment = "n"
         # Items and their names.  Named items are only rarely granted.
