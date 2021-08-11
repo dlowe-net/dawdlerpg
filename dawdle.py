@@ -1498,21 +1498,21 @@ class DawdleBot(object):
         if self._quest is None:
             self.notice(nick, "There is no active quest.")
         elif self._quest.mode == 1:
-            qp = quest.questors
+            qp = self._quest.questors
             self.notice(nick,
                              f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                             f"are on a quest to {quest.text}. Quest to complete in "
-                             f"{duration(quest.qtime - time.time())}.")
+                             f"are on a quest to {self._quest.text}. Quest to complete in "
+                             f"{duration(self._quest.qtime - time.time())}.")
         elif self._quest.mode == 2:
-            qp = quest.questors
+            qp = self._quest.questors
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
             self.notice(nick,
                              f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                             f"are on a quest to {quest.text}. Participants must first reach "
-                             f"({quest.dests[0][0]}, {quest.dests[0][1]}), then "
-                             f"({quest.dests[1][0]}, {quest.dests[1][1]}).{mapnotice}")
+                             f"are on a quest to {self._quest.text}. Participants must first reach "
+                             f"({self._quest.dests[0][0]}, {self._quest.dests[0][1]}), then "
+                             f"({self._quest.dests[1][0]}, {self._quest.dests[1][1]}).{mapnotice}")
 
 
     def penalize(self, player, kind, text=None):

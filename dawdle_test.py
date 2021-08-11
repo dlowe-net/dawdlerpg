@@ -481,6 +481,7 @@ class TestQuest(unittest.TestCase):
             "quest_time": 12
         }
         self.bot.quest_start(now)
+        self.bot.private_message('foo', 'quest')
         # time passes
         self.bot._quest.qtime = now-1
         self.bot.quest_check(now)
@@ -488,6 +489,9 @@ class TestQuest(unittest.TestCase):
         self.assertListEqual(self.irc.chanmsgs, [
             "a, b, c, and d have been chosen by the gods to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu.  Quest to end in 0 days, 12:00:00.",
             "a, b, c, and d have blessed the realm by completing their quest! 25% of their burden is eliminated."
+        ])
+        self.assertListEqual(self.irc.notices['foo'], [
+            "a, b, c, and d are on a quest to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu. Quest to complete in 0 days, 11:59:59."
         ])
         self.assertEqual(op[0].nextlvl, 450)
         self.assertEqual(op[1].nextlvl, 450)
@@ -509,6 +513,7 @@ class TestQuest(unittest.TestCase):
         }
         self.bot._players._online = op
         self.bot.quest_start(now)
+        self.bot.private_message('foo', 'quest')
         for p in op:
             p.posx, p.posy = 400, 475
         self.bot.quest_check(1)
@@ -520,6 +525,9 @@ class TestQuest(unittest.TestCase):
             "a, b, c, and d have been chosen by the gods to explore and chart the dark lands of T'rnalvph.  Participants must first reach (400,475), then (480,380). See https://example.com/ to monitor their journey's progress.",
             "a, b, c, and d have reached a landmark on their journey! 1 landmark remains.",
             "a, b, c, and d have completed their journey! 25% of their burden is eliminated."
+        ])
+        self.assertListEqual(self.irc.notices['foo'], [
+            "a, b, c, and d are on a quest to explore and chart the dark lands of T'rnalvph. Participants must first reach (400, 475), then (480, 380). See https://example.com/ to monitor their journey's progress."
         ])
         self.assertEqual(op[0].nextlvl, 450)
         self.assertEqual(op[1].nextlvl, 450)
