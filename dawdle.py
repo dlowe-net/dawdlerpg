@@ -2099,7 +2099,7 @@ class DawdleBot(object):
             return
         self._quest = Quest(qp)
         if match[1] == '1':
-            quest_time = self.randint('quest_time', 12, 24)*3600
+            quest_time = self.randint('quest_time', 6, 12)*3600
             self._quest.mode = 1
             self._quest.text = match[2]
             self._quest.qtime = time.time() + quest_time
