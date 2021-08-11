@@ -37,8 +37,8 @@ log = logging.getLogger()
 VERSION = "1.0.0"
 
 # Penalties and their description
-PENALTIES = {"quit": 20, "nick": 30, "message": 1, "part": 200, "kick": 250, "logout": 20}
-PENDESC = {"quit": "quitting", "nick": "changing nicks", "message": "messaging", "part": "parting", "kick": "being kicked", "logout": "LOGOUT command"}
+PENALTIES = {"quit": 20, "dropped": 10, "nick": 30, "message": 1, "part": 200, "kick": 250, "logout": 20}
+PENDESC = {"quit": "quitting", "dropped": "dropped connection", "nick": "changing nicks", "message": "messaging", "part": "parting", "kick": "being kicked", "logout": "LOGOUT command"}
 
 
 # Output throttling - handle bursts of 5 messages every ten seconds
@@ -228,6 +228,8 @@ class Player(object):
         p.penkick = 0
         # Total penalties from quitting
         p.penquit = 0
+        # Total penalties from dropping connection
+        p.pendropped = 0
         # Total penalties from losing quests
         p.penquest = 0
         # Total penalties from using the logout command
@@ -379,6 +381,7 @@ class IdleRPGPlayerStore(PlayerStore):
                 for f in ["isadmin", "online"]:
                     d[f] = (d[f] == '1')
 
+                d['pendropped'] = 0 # unsupported in saving
                 p = Player.from_dict(d)
                 players[p.name] = p
         return players
@@ -402,7 +405,7 @@ class IdleRPGPlayerStore(PlayerStore):
             str(p.pennick),
             str(p.penpart),
             str(p.penkick),
-            str(p.penquit),
+            str(p.penquit + p.pendropped),
             str(p.penquest),
             str(p.penlogout),
             str(int(p.created)),
@@ -520,7 +523,7 @@ class Sqlite3PlayerStore(PlayerStore):
 
 class PlayerDB(object):
 
-    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
+    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
 
 
     def __init__(self, store):
@@ -920,6 +923,8 @@ class IRCClient:
         if conf['detectsplits'] and re.match(r'\S+\.\S+ \S+\.\S+', msg.trailing):
             # Don't penalize on netsplit
             self._bot.netsplit(msg.src)
+        elif re.match(r"Read error|Ping timeout", msg.trailing):
+            self._bot.nick_dropped(msg.src)
         else:
             self._bot.nick_quit(msg.src)
 
@@ -1188,6 +1193,12 @@ class DawdleBot(object):
 
 
     def netsplit(self, src):
+        player = self._players.from_nick(src)
+        if player:
+            player.lastlogin = time.time()
+
+
+    def nick_dropped(self, src):
         player = self._players.from_nick(src)
         if player:
             player.lastlogin = time.time()
@@ -1633,7 +1644,7 @@ class DawdleBot(object):
             penalty = conf['limitpen']
         setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
         player.nextlvl += penalty
-        if kind != 'quit':
+        if kind not in ['dropped', 'quit']:
             self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
 
     def expire_splits(self):
@@ -1641,6 +1652,7 @@ class DawdleBot(object):
         for p in self._players.online():
             if p.nick not in self._irc.userhosts and p.lastlogin < expiration:
                 print(f"Expiring {p.nick} who was logged in as {p.nick} but was lost in a netsplit.")
+                self.penalize(player, "dropped")
                 p.online = False
         self._players.write()
 
