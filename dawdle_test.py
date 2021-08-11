@@ -535,6 +535,32 @@ class TestQuest(unittest.TestCase):
         self.assertEqual(op[2].nextlvl, 996)
         self.assertEqual(op[3].nextlvl, 996)
 
+class TestAdminCommands(unittest.TestCase):
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+    def test_delold(self):
+        op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
+        level = 25
+        expired = time.time() - 9 * 86400
+        for p in op[:2]:
+            p.lastlogin = expired
+        op[3].online = True
+        op[3].isadmin = True
+        self.bot.cmd_delold(op[3], op[3].nick, "7")
+        self.assertListEqual(self.irc.chanmsgs, [
+            "2 accounts not accessed in the last 7 days removed by d."
+        ])
+        self.assertNotIn(op[0].name, self.bot._players)
+        self.assertNotIn(op[1].name, self.bot._players)
+        self.assertIn(op[2].name, self.bot._players)
+        self.assertIn(op[3].name, self.bot._players)
+
+
 class TestRPCheck(unittest.TestCase):
 
     def setUp(self):

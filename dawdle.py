@@ -100,8 +100,6 @@ parser.add_argument("-d", "--dbfile", "--irpgdb", "--db")
 args = parser.parse_args()
 conf = {}
 preferred_nick = ""
-silent_mode = False
-pause_mode = False
 
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
 
@@ -540,6 +538,7 @@ class PlayerDB(object):
     def close(self):
         """Close the underlying db.  Used for testing."""
         self._store.close()
+
 
     def exists(self):
         return self._store.exists()
@@ -1022,6 +1021,9 @@ class DawdleBot(object):
         self._state = 'disconnected' # connected, disconnected, or ready
         self._quest = None      # quest if any
         self._qtimer = 0        # time until next quest
+        self._silence = set()     # can have 'chanmsg' or 'notice' to silence them
+        self._pause = False # prevents game events from happening when True
+
         self._overrides = {}
 
 
@@ -1061,16 +1063,22 @@ class DawdleBot(object):
 
 
     def chanmsg(self, text):
+        if 'chanmsgs' in self._silence:
+            return
         self._irc.chanmsg(text)
 
 
     def logchanmsg(self, text):
+        if 'chanmsgs' in self._silence:
+            return
         self._irc.chanmsg(text)
         with open(conf['modsfile'], "a") as ouf:
             ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
 
 
     def notice(self, nick, text):
+        if 'notices' in self._silence:
+            return
         self._irc.notice(nick, text)
 
 
@@ -1292,6 +1300,13 @@ class DawdleBot(object):
         if nick not in self._irc.userhosts:
             self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
             return
+        if self._pause:
+            self.notice(nick,
+                        "Sorry, new accounts may not be registered while the "
+                        "bot is in pause mode; please wait a few minutes and "
+                        "try again.")
+            return
+
 
         parts = args.split(' ', 2)
         if len(parts) != 3:
@@ -1476,8 +1491,8 @@ class DawdleBot(object):
 
     def cmd_pause(self, player, nick, args):
         """Toggle pause mode."""
-        pause_mode = not pause_mode
-        if pause_mode:
+        self._pause = not self._pause
+        if self._pause:
             self.notice(nick, "Pause mode enabled.")
         else:
             self.notice(nick, "Pause mode disabled.")
@@ -1505,11 +1520,20 @@ class DawdleBot(object):
 
     def cmd_silent(self, player, nick, args):
         """Set silent mode."""
-        silent_mode = not silent_mode
-        if silent_mode:
-            self.notice(nick, "Silent mode enabled.")
+        if args == "0":
+            self._silence = set()
+            self.notice(nick, "Silent mode set to 0.  Channels and notices are enabled.")
+        elif args == "1":
+            self.notice(nick, "Silent mode set to 1.  Channel output is silenced.")
+            self._silence = set(["chanmsg"])
+        elif args == "2":
+            self.notice(nick, "Silent mode set to 2.  Private notices are silenced.")
+            self._silence = set(["notices"])
+        elif args == "3":
+            self.notice(nick, "Silent mode set to 3.  Channel and private notice output are silenced.")
+            self._silence = set(["chanmsg", "notices"])
         else:
-            self.notice(nick, "Silent mode disabled.")
+            self.notice(nick, "Try: SILENT 0|1|2|3")
 
 
     def cmd_hog(self, player, nick, args):
@@ -1661,7 +1685,7 @@ class DawdleBot(object):
         self.move_players()
         self.quest_check(now)
 
-        if not pause_mode:
+        if not self._pause:
             self._players.write()
 
         if now % 120 == 0 and self._quest:
@@ -1675,7 +1699,7 @@ class DawdleBot(object):
                                  f"Next level in {duration(p.nextlvl)}.")
         if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
             self.challenge_op()
-        if now % 600 == 0 and pause_mode:
+        if now % 600 == 0 and self._pause:
             self.chanmsg("WARNING: Cannot write database in PAUSE mode!")
 
         for player in op:
