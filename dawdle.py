@@ -26,6 +26,7 @@ import random
 import re
 import sqlite3
 import sys
+import termios
 import textwrap
 import time
 
@@ -629,7 +630,14 @@ def first_setup():
         pname = conf["owner"]
     pclass = input("Enter a character class for this account: ")
     pclass = pclass[:30]
-    ppass = input("Enter a password for this account: ")
+    try:
+        old = termios.tcgetattr(sys.stdin.fileno())
+        new = old.copy()
+        new[3] = new[3] & ~termios.ECHO
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, new)
+        ppass = input("Password for this account: ")
+    finally:
+        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old)
 
     db.create()
     p = db.new_player(pname, pclass, ppass)
