@@ -339,7 +339,7 @@ class IdleRPGPlayerStore(PlayerStore):
     }
 
     def code_to_item(self, s):
-        match = re.match(r"^(\d+)(.?)", s)
+        match = re.match(r"(\d+)(.?)", s)
         if not match:
             print(f"wtf not matched: {s}")
         lvl = int(match[1])
@@ -363,7 +363,7 @@ class IdleRPGPlayerStore(PlayerStore):
         players = {}
         with open(self._dbpath) as inf:
             for line in inf.readlines():
-                if re.match(r'^\s*(?:#|$)', line):
+                if re.match(r'\s*(?:#|$)', line):
                     continue
                 parts = line.rstrip().split("\t")
                 if len(parts) != 32:
@@ -1029,6 +1029,8 @@ class DawdleBot(object):
         self._silence = set() # can have 'chanmsg' or 'notice' to silence them
         self._pause = False # prevents game events from happening when True
         self._last_reg_time = 0
+        self._events = {}       # pre-parsed contents of events file
+        self._events_loaded = 0 # time the events file was loaded, to detect file changes
         self._overrides = {}
 
 
@@ -1089,6 +1091,7 @@ class DawdleBot(object):
 
     def ready(self):
         self._state = 'ready'
+        self.refresh_events()
         autologin = []
         for p in self._players.online():
             if p.nick in self._irc.userhosts and p.userhost == self._irc.userhosts[p.nick]:
@@ -1652,6 +1655,18 @@ class DawdleBot(object):
         if kind not in ['dropped', 'quit']:
             self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
 
+    def refresh_events(self):
+        if self._events_loaded == os.path.getmtime(conf['eventsfile']):
+            return
+
+        self._events = {}
+        with open(conf['eventsfile']) as inf:
+            for line in inf.readlines():
+                line = line.rstrip()
+                if line != "":
+                    self._events.setdefault(line[0], []).append(line[1:].lstrip())
+
+
     def expire_splits(self):
         expiration = time.time() - conf['splitwait']
         for p in self._players.online():
@@ -1677,6 +1692,7 @@ class DawdleBot(object):
     def rpcheck(self, now, passed):
         if conf['detectsplits']:
             self.expire_splits()
+        self.refresh_events()
 
         op = self._players.online()
         online_count = 0
@@ -1931,10 +1947,7 @@ class DawdleBot(object):
         # Level setback calamity
         amount = int(self.randint('calamity_setback_pct', 5, 13) / 100 * player.nextlvl)
         player.nextlvl += amount
-        # TODO: reading this file every time is silly
-        with open(conf['eventsfile']) as inf:
-            lines = [line.rstrip() for line in inf.readlines() if line.startswith("C ")]
-        action = self.randchoice('calamity_action', lines)[2:]
+        action = self.randchoice('calamity_action', self._events["C"])
         self.logchanmsg(f"{player.name} {action}! This terrible calamity has slowed them "
                         f"{duration(amount)} from level {player.level + 1}.")
         if player.nextlvl > 0:
@@ -1977,10 +1990,7 @@ class DawdleBot(object):
         # Level godsend
         amount = int(self.randint('godsend_amount_pct', 5, 13) / 100 * player.nextlvl)
         player.nextlvl -= amount
-        # TODO: reading this file every time is silly
-        with open(conf['eventsfile']) as inf:
-            lines = [line.rstrip() for line in inf.readlines() if line.startswith("G ")]
-        action = self.randchoice('godsend_action', lines)[2:]
+        action = self.randchoice('godsend_action', self._events["G"])
         self.logchanmsg(f"{player.name} {action}! This wondrous godsend has accelerated them "
                         f"{duration(amount)} towards level {player.level + 1}.")
         if player.nextlvl > 0:
@@ -2089,12 +2099,9 @@ class DawdleBot(object):
         if len(qp) < 4:
             return
         qp = self.randsample('quest_members', qp, 4)
-        # TODO: reading this file every time is silly
-        with open(conf['eventsfile']) as inf:
-            lines = [line.rstrip() for line in inf.readlines() if line.startswith("Q")]
-        questconf = self.randchoice('quest_selection', lines)
-        match = (re.match(r'^Q(1) (.*)', questconf) or
-                 re.match(r'^Q(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
+        questconf = self.randchoice('quest_selection', self._events["Q"])
+        match = (re.match(r'(1) (.*)', questconf) or
+                 re.match(r'(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
         if not match:
             return
         self._quest = Quest(qp)

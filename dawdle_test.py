@@ -438,6 +438,7 @@ class TestQuest(unittest.TestCase):
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
+        self.bot.refresh_events()
 
 
     def test_questing_mode_1(self):
@@ -449,7 +450,7 @@ class TestQuest(unittest.TestCase):
             p.lastlogin = now - 36001
         self.bot._overrides = {
             "quest_members": op,
-            "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
+            "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
         self.bot.quest_start(now)
@@ -481,7 +482,7 @@ class TestQuest(unittest.TestCase):
             p.lastlogin = now - 36001
         self.bot._overrides = {
             "quest_members": op,
-            "quest_selection": "Q2 400 475 480 380 explore and chart the dark lands of T'rnalvph",
+            "quest_selection": "2 400 475 480 380 explore and chart the dark lands of T'rnalvph",
         }
         self.bot._players._online = op
         self.bot.quest_start(now)
@@ -518,7 +519,7 @@ class TestQuest(unittest.TestCase):
             p.lastlogin = now - 36001
         self.bot._overrides = {
             "quest_members": op,
-            "quest_selection": "Q1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
+            "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
         self.bot.quest_start(now)
