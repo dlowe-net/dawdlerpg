@@ -24,6 +24,8 @@ import os
 import os.path
 import random
 import re
+import resource
+import signal
 import sqlite3
 import sys
 import termios
@@ -2340,6 +2342,35 @@ async def mainloop(client):
         await client.connect(addr, port)
 
 
+def daemonize():
+    """Daemonize the process."""
+    # python-daemon on pip would do this better.
+
+    # set core limit to 0
+    core_limit = (0, 0)
+    resource.setrlimit(resource.RLIMIT_CORE, core_limit)
+    os.umask(0)
+
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+    pid = os.fork()
+    if pid > 0:
+        os._exit(0)
+    os.setsid()
+    pid = os.fork()
+    if pid > 0:
+        os._exit(0)
+    signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+    signal.signal(signal.SIGTTIN, signal.SIG_IGN)
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    os.dup2(os.open(os.devnull, os.O_RDWR), sys.stdin.fileno())
+    os.dup2(os.open(os.devnull, os.O_RDWR), sys.stdout.fileno())
+    os.dup2(os.open(os.devnull, os.O_RDWR), sys.stderr.fileno())
+    if 'pidfile' in conf:
+        with open(conf['pidfile'], "w") as ouf:
+            ouf.write(f"{os.getpid()}\n")
+
+
 def start_bot():
     """Main entry point for bot."""
     global conf
@@ -2361,9 +2392,13 @@ def start_bot():
     else:
         first_setup()
 
+    if not conf['debug']:
+        daemonize()
+
     bot = DawdleBot(db)
     client = IRCClient(bot)
     asyncio.run(mainloop(client))
+
 
 if __name__ == "__main__":
     start_bot()
