@@ -25,6 +25,7 @@ import os.path
 import random
 import re
 import resource
+import shutil
 import signal
 import sqlite3
 import sys
@@ -319,6 +320,12 @@ class PlayerStore(object):
     def create(self):
         pass
 
+    def exists(self):
+        pass
+
+    def backup(self):
+        pass
+
     def readall(self):
         pass
 
@@ -382,6 +389,12 @@ class IdleRPGPlayerStore(PlayerStore):
     def exists(self):
         """Returns true if the db file exists."""
         return os.path.exists(self._dbpath)
+
+
+    def backup(self):
+        """Backs up database to a directory."""
+        os.makedirs(".dbbackup", exist_ok=True)
+        shutil.copyfile(conf['dbfile'], f".dbbackup/{conf['dbfile']}{int(time.time())}")
 
 
     def readall(self):
@@ -516,6 +529,16 @@ class Sqlite3PlayerStore(PlayerStore):
         return os.path.exists(self._dbpath)
 
 
+    def backup(self):
+        """Backs up database to a directory."""
+        os.makedirs(".dbbackup", exist_ok=True)
+        with self._connect() as con:
+            backup_db = sqlite3.connect(f".dbbackup/{conf['dbfile']}{int(time.time())}")
+            with backup_db:
+                self._db.backup(backup_db)
+            backup_db.close()
+
+
     def readall(self):
         """Reads all the players from the db."""
         players = {}
@@ -590,6 +613,11 @@ class PlayerDB(object):
     def exists(self):
         """Returns True if the underlying store exists."""
         return self._store.exists()
+
+
+    def backup_store(self):
+        """Backup store into another file."""
+        self._store.backup()
 
 
     def load(self):
@@ -1514,7 +1542,8 @@ class DawdleBot(object):
 
     def cmd_backup(self, player, nick, args):
         """copy database file to a backup directory."""
-        pass
+        self._player.backup_store()
+        self.notice(nick, "Player database backed up.")
 
 
     def cmd_chclass(self, player, nick, args):
@@ -1864,6 +1893,7 @@ class DawdleBot(object):
                 for i, p in zip(itertools.count(), top):
                     self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
                                  f"Next level in {duration(p.nextlvl)}.")
+            self.backup_store()
         if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
             self.challenge_op()
         if now % 600 == 0 and self._pause:
@@ -2388,6 +2418,7 @@ def start_bot():
     global db
     db = PlayerDB(IdleRPGPlayerStore(conf["dbfile"]))
     if db.exists():
+        db.backup_store()
         db.load()
     else:
         first_setup()
