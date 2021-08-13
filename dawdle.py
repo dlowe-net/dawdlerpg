@@ -103,7 +103,7 @@ parser.add_argument("-d", "--dbfile", "--irpgdb", "--db")
 
 args = parser.parse_args()
 conf = {}
-preferred_nick = ""
+start_time = int(time.time())
 
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
 
@@ -122,7 +122,7 @@ def parse_val(s):
     return s
 
 
-def plural(num, singlestr, pluralstr):
+def plural(num, singlestr='', pluralstr='s'):
     """Return singlestr when num is 1, otherwise pluralstr."""
     if num == 1:
         return singlestr
@@ -143,7 +143,7 @@ def duration(secs):
     d, secs = int(secs / 86400), secs % 86400
     h, secs = int(secs / 3600), secs % 3600
     m, secs = int(secs / 60), secs % 60
-    return f"{d} day{plural(d, '', 's')}, {h:02d}:{m:02d}:{int(secs):02d}"
+    return f"{d} day{plural(d)}, {h:02d}:{m:02d}:{int(secs):02d}"
 
 
 def read_config(path):
@@ -680,6 +680,11 @@ class PlayerDB(object):
         return result
 
 
+    def count(self):
+        """Return number of all players registered."""
+        return len(self._players)
+
+
     def online(self):
         """Return all active, online players."""
         return [p for p in self._players.values() if p.online]
@@ -751,12 +756,15 @@ class IRCClient:
         self._bot = bot
         self._writer = None
         self._nick = conf['botnick']
+        self._bytes_sent = 0
+        self._bytes_received = 0
         self.quitting = False
 
 
     async def connect(self, addr, port):
         """Connect to IRC network and handle messages."""
         reader, self._writer = await asyncio.open_connection(addr, port, ssl=True)
+        self._server = addr
         self._connected = True
         self._messages_sent = 0
         self._writeq = []
@@ -780,6 +788,7 @@ class IRCClient:
                     self._flushq_task.cancel()
                 self._bot.disconnected()
                 break
+            self._bytes_received += len(line)
             # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
             try:
                 line = str(line, encoding='utf8')
@@ -798,8 +807,9 @@ class IRCClient:
         if self._messages_sent < THROTTLE_RATE:
             if conf["debug"]:
                 print(int(time.time()), f"({self._messages_sent})->", s)
-            self._messages_sent += 1
             self._writer.write(b)
+            self._messages_sent += 1
+            self._bytes_sent += len(b)
         else:
             self._writeq.append(b)
 
@@ -813,8 +823,9 @@ class IRCClient:
         if conf["debug"]:
             print(int(time.time()), "=>", s)
         b = bytes(s+"\r\n", encoding='utf8')
-        self._messages_sent += 1
         self._writer.write(b)
+        self._messages_sent += 1
+        self._bytes_sent += len(b)
         if not self._flushq_task:
             self._flushq_task = asyncio.create_task(self.flushq_task())
 
@@ -827,8 +838,9 @@ class IRCClient:
             while self._writeq and self._messages_sent < THROTTLE_RATE:
                 if conf["debug"]:
                     print(int(time.time()), f"({self._messages_sent})~>", str(self._writeq[0], encoding='utf8'))
-                self._messages_sent += 1
                 self._writer.write(self._writeq[0])
+                self._messages_sent += 1
+                self._bytes_sent += len(self._writeq[0])
                 self._writeq = self._writeq[1:]
             if self._writeq:
                 await asyncio.sleep(THROTTLE_PERIOD)
@@ -882,6 +894,7 @@ class IRCClient:
 
     def handle_005(self, msg):
         """RPL_ISUPPORT - server features and information"""
+        self._server = msg.src
         params = dict([arg.split('=') if '=' in arg else (arg, arg) for arg in msg.args])
         if 'MODES' in params:
             self._maxmodes = int(params['MODES'])
@@ -1152,6 +1165,7 @@ class DawdleBot(object):
         self._last_reg_time = 0
         self._events = {}       # pre-parsed contents of events file
         self._events_loaded = 0 # time the events file was loaded, to detect file changes
+        self._new_accounts = 0  # number of new accounts created since startup
         self._overrides = {}
 
 
@@ -1232,7 +1246,7 @@ class DawdleBot(object):
                 p.lastlogin = time.time()
         self._players.write()
         if autologin:
-            self.chanmsg(f"{len(autologin)} user{plural(len(autologin), '', 's')} automatically logged in; accounts: {', '.join(autologin)}")
+            self.chanmsg(f"{len(autologin)} user{plural(len(autologin))} automatically logged in; accounts: {', '.join(autologin)}")
             if 'o' in self._irc.usermodes[self._irc._nick]:
                 self.acquired_ops()
         else:
@@ -1392,6 +1406,39 @@ class DawdleBot(object):
         self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe")
 
 
+    def cmd_info(self, player, nick, args):
+        """display bot information and admin list."""
+        if not player.isadmin:
+            if conf['allowuserinfo']:
+                self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe, "
+                        f"On via server: {self._irc.server}. Admins online: "
+                        f"{', '.join([p.name for p in self._players.online() if p.isadmin])}")
+            else:
+                self.notice(nick, "You cannot do 'info'.")
+            return
+
+        online_count = len(self._players.online())
+        q_bytes = sum([len(b) for b in self._irc._writeq])
+        online_admins = [p.name for p in self._players.online() if p.isadmin]
+        if self._silence:
+            silent_mode = ','.join(self._silence)
+        else:
+            silent_mode = 'off'
+        self.notice(nick,
+                    f"{self._irc._bytes_sent / 1024:.2f}kiB sent, "
+                    f"{self._irc._bytes_received / 1024:.2f}kiB received "
+                    f"in {duration(time.time() - start_time)}. "
+                    f"{online_count} player{plural(online_count)} online of "
+                    f"{self._players.count()} total users. "
+                    f"{self._new_accounts} account{plural(self._new_accounts)} created since startup. "
+                    f"PAUSE_MODE is {'on' if self._pause else 'off'}, "
+                    f"SILENT_MODE is {silent_mode}. "
+                    f"Outgoing queue is {q_bytes} byte{plural(q_bytes)} "
+                    f"in {len(self._irc._writeq)} item{plural(len(self._irc._writeq))}. "
+                    f"On via: {self._irc._server}. "
+                    f"Admin{plural(len(online_admins))} online: {', '.join(online_admins)}")
+
+
     def cmd_whoami(self, player, nick, args):
         """display game character information."""
         self.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
@@ -1500,6 +1547,7 @@ class DawdleBot(object):
             self.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
             self.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
             self.notice(nick, "NOTE: The point of the game is to see who can idle the longest. As such, talking in the channel, parting, quitting, and changing nicks all penalize you.")
+            self._new_accounts += 1
 
 
     def cmd_removeme(self, player, nick, args):
@@ -1624,7 +1672,7 @@ class DawdleBot(object):
         old = [p.name for p in self._players.inactive_since(expire_time)]
         for pname in old:
             self._players.delete_player(pname)
-        self.chanmsg(f"{len(old)} account{plural(len(old), '', 's')} not accessed "
+        self.chanmsg(f"{len(old)} account{plural(len(old))} not accessed "
                      f"in the last {days} days removed by {player.name}.")
 
 
@@ -1633,12 +1681,6 @@ class DawdleBot(object):
         self.notice(nick, "Shutting down.")
         self._irc.quit()
         sys.exit(0)
-
-
-    def cmd_info(self, player, nick, args):
-        """Info on bot internals."""
-        # Not implemented.
-        pass
 
 
     def cmd_jump(self, player, nick, args):
@@ -1691,8 +1733,9 @@ class DawdleBot(object):
 
     def cmd_silent(self, player, nick, args):
         """Set silent mode."""
+        old_silence = self._silence
+        self._silence = set()
         if args == "0":
-            self._silence = set()
             self.notice(nick, "Silent mode set to 0.  Channels and notices are enabled.")
         elif args == "1":
             self.notice(nick, "Silent mode set to 1.  Channel output is silenced.")
@@ -1705,6 +1748,7 @@ class DawdleBot(object):
             self._silence = set(["chanmsg", "notices"])
         else:
             self.notice(nick, "Try: SILENT 0|1|2|3")
+            self._silence = old_silence
 
 
     def cmd_hog(self, player, nick, args):
@@ -2328,7 +2372,7 @@ class DawdleBot(object):
                 if dests_left > 0:
                     self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
                                  f"have reached a landmark on their journey! {dests_left} "
-                                 f"landmark{plural(dests_left, '', 's')} "
+                                 f"landmark{plural(dests_left)} "
                                  f"remain{plural(dests_left, 's', '')}.")
                 else:
                     self.logchanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
