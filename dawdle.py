@@ -52,6 +52,7 @@ THROTTLE_PERIOD = 10
 # command line overrides .irpg.conf
 parser = argparse.ArgumentParser(description="IdleRPG clone")
 parser.add_argument("-v", "--verbose")
+parser.add_argument("--conf", default="dawdle.conf")
 parser.add_argument("--debug")
 parser.add_argument("--debugfile")
 parser.add_argument("-s", "--server", action="append")
@@ -147,7 +148,7 @@ def duration(secs):
 
 
 def read_config(path):
-    """Return dict with contents of irpg configuration file."""
+    """Return dict with contents of configuration file."""
     newconf = {"servers": [], "okurls": []}
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
@@ -276,14 +277,17 @@ class Player(object):
         p.weaponname = ''
         return p
 
+
     def set_password(self, ppass):
         """Sets the password field with a hashed value."""
         self.pw = crypt.crypt(ppass, crypt.mksalt())
+
 
     def acquire_item(self, kind, level, name=''):
         """Acquire an item."""
         setattr(self, kind, level)
         setattr(self, kind+"name", name)
+
 
     def swap_items(self, o, kind):
         """Swap items of KIND with the other player O."""
@@ -293,12 +297,11 @@ class Player(object):
         self.acquire_item(kind, getattr(o, kind), getattr(o, namefield))
         o.acquire_item(kind, tmpitem, tmpitemname)
 
+
     def itemsum(self):
         """Add up the power of all the player's items"""
-        sum = 0
-        for item in Player.ITEMS:
-            sum += getattr(self, item)
-        return sum
+        return sum([getattr(self, item) for item in Player.ITEMS])
+
 
     def battleitemsum(self):
         """
@@ -343,6 +346,7 @@ class PlayerStore(object):
 
     def delete(self):
         pass
+
 
 class IdleRPGPlayerStore(PlayerStore):
     """Implements a PlayerStore compatible with the IdleRPG db."""
@@ -463,6 +467,7 @@ class IdleRPGPlayerStore(PlayerStore):
             str(p.alignment)
         ]) + "\n"
 
+
     def writeall(self, players):
         """Writes all players to an IdleRPG db."""
         with open(self._dbpath, "w") as ouf:
@@ -493,7 +498,7 @@ class IdleRPGPlayerStore(PlayerStore):
 
 
 class Sqlite3PlayerStore(PlayerStore):
-
+    """Player store using sqlite3."""
 
     @staticmethod
     def dict_factory(cursor, row):
@@ -758,6 +763,7 @@ class IRCClient:
         self._nick = conf['botnick']
         self._bytes_sent = 0
         self._bytes_received = 0
+        self._caps = set()
         self.quitting = False
 
 
@@ -774,7 +780,8 @@ class IRCClient:
         self._modetypes = {}
         self.userhosts = {}            # all players in the channel and their userhost
         self.usermodes = {}            # all players in the channel and their modes
-        self.sendnow("CAP REQ :multi-prefix")
+        self._caps = set()             # all enabled capabilities
+        self.sendnow("CAP REQ :multi-prefix userhost-in-names")
         self.sendnow("CAP END")
         if 'BOTPASS' in os.environ:
             self.sendnow(f"PASS {os.environ['BOTPASS']}")
@@ -941,9 +948,15 @@ class IRCClient:
 
     def handle_353(self, msg):
         """RPL_NAMREPLY - names in the channel"""
-        # We ignore this for now, since the userhost-in-names cap
-        # isn't widely supported.
-        pass
+        if 'userhost-in-names' not in self._caps:
+            return
+        prefixes=''.join(self._prefixmodes.keys())
+        userhost_re = re.compile(f"([{prefixes}]*)" + r"(\S+)!(\S+@\S+)")
+        for u in msg.trailing.split(' '):
+            m = userhost_re.match(u)
+            if m:
+                self.userhosts[m[2]] = m[3]
+                self.usermodes[m[2]] = set([self._prefixmodes[p] for p in m[1]])
 
 
     def handle_366(self, msg):
@@ -951,7 +964,8 @@ class IRCClient:
         # We know who is in the channel now
         if 'botopcmd' in conf:
             self.sendnow(re.sub(r'%botnick%', self._nick, conf['botopcmd']))
-        self.send(f"WHO {conf['botchan']}")
+        if 'userhost-in-names' not in self._caps:
+            self.send(f"WHO {conf['botchan']}")
 
 
     def handle_433(self, msg):
@@ -960,6 +974,13 @@ class IRCClient:
         self.nick(self._nick)
         if 'botghostcmd' in conf:
             self.send(conf['botghostcmd'])
+
+
+    def handle_cap(self, msg):
+        """CAP - notification of capability"""
+        # We only care about enabled capabilities.
+        if msg.args[1] == "ACK":
+            self._caps.update(msg.args[2].split(' '))
 
 
     def handle_join(self, msg):
@@ -1713,7 +1734,7 @@ class DawdleBot(object):
     def cmd_rehash(self, player, nick, args):
         """Re-read configuration file."""
         global conf
-        conf = read_config("irpg.conf")
+        conf = read_config(args.conf)
         self.notice(nick, "Configuration reloaded.")
 
 
@@ -1937,7 +1958,7 @@ class DawdleBot(object):
                 for i, p in zip(itertools.count(), top):
                     self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
                                  f"Next level in {duration(p.nextlvl)}.")
-            self.backup_store()
+            self._players.backup_store()
         if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
             self.challenge_op()
         if now % 600 == 0 and self._pause:
@@ -2448,7 +2469,7 @@ def daemonize():
 def start_bot():
     """Main entry point for bot."""
     global conf
-    conf = read_config("irpg.conf")
+    conf = read_config(args.conf)
 
     # override configurations from command line
     for k,v in vars(args).items():

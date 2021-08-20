@@ -90,6 +90,15 @@ class TestIRCMessage(unittest.TestCase):
         msg = dawdle.IRCClient.parse_message(None, line)
 
 
+class TestIRCClient(unittest.TestCase):
+
+    def test_handle_cap(self):
+        dawdle.conf['botnick'] = 'foo'
+        irc = dawdle.IRCClient(None)
+        irc.handle_cap(dawdle.IRCClient.Message(tags={}, src='tungsten.libera.chat', user=None, host=None, cmd='CAP', args=['*', 'ACK', 'multi-prefix'], trailing='multi-prefix', line=':tungsten.libera.chat CAP * ACK :multi-prefix', time=1629501206))
+        self.assertIn("multi-prefix", irc._caps)
+
+
 class FakeIRCClient(object):
     def __init__(self):
         self._nick = 'dawdlerpg'
