@@ -500,6 +500,9 @@ class IdleRPGPlayerStore(PlayerStore):
 class Sqlite3PlayerStore(PlayerStore):
     """Player store using sqlite3."""
 
+    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
+
+
     @staticmethod
     def dict_factory(cursor, row):
         """Converts a sqlite3 row into a dict."""
@@ -526,7 +529,7 @@ class Sqlite3PlayerStore(PlayerStore):
     def create(self):
         """Initializes a new db."""
         with self._connect() as cur:
-            cur.execute(f"create table players ({','.join(PlayerDB.FIELDS)})")
+            cur.execute(f"create table players ({','.join(Sqlite3PlayerStore.FIELDS)})")
 
 
     def exists(self):
@@ -557,7 +560,7 @@ class Sqlite3PlayerStore(PlayerStore):
     def writeall(self, players):
         """Writes all player information into the db."""
         with self._connect() as cur:
-            update_fields = ",".join(f"{k}=:{k}" for k in PlayerDB.FIELDS)
+            update_fields = ",".join(f"{k}=:{k}" for k in Sqlite3PlayerStore.FIELDS)
             cur.executemany(f"update players set {update_fields} where name=:name",
                             [vars(p) for p in players.values()])
 
@@ -572,7 +575,7 @@ class Sqlite3PlayerStore(PlayerStore):
         with self._connect() as cur:
             d = vars(p)
             cur.execute(f"insert into players values ({('?, ' * len(d))[:-2]})",
-                        [d[k] for k in PlayerDB.FIELDS])
+                        [d[k] for k in Sqlite3PlayerStore.FIELDS])
             cur.commit()
 
 
@@ -592,9 +595,6 @@ class Sqlite3PlayerStore(PlayerStore):
 
 class PlayerDB(object):
     """Class to manage a collection of Players."""
-
-    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
-
 
     def __init__(self, store):
         self._store = store
