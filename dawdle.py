@@ -204,7 +204,7 @@ class Player(object):
         return p
 
     @staticmethod
-    def new_player(pname, pclass, ppass):
+    def new_player(pname, pclass, ppass, nextlvl):
         """Initialize a new player."""
         now = int(time.time())
         p = Player()
@@ -219,7 +219,7 @@ class Player(object):
         # level
         p.level = 0
         # time in seconds to next level
-        p.nextlvl = conf['rpbase']
+        p.nextlvl = nextlvl
         # whether or not the account is online
         p.online = False
         # IRC nick if online
@@ -649,7 +649,7 @@ class PlayerDB(object):
 
         pclass = pclass[:30]
 
-        p = Player.new_player(pname, pclass, ppass)
+        p = Player.new_player(pname, pclass, ppass, conf['rpbase'])
         self._players[pname] = p
         self._store.new(p)
 
