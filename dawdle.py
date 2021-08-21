@@ -16,6 +16,7 @@
 
 import argparse
 import asyncio
+import atexit
 import collections
 import crypt
 import itertools
@@ -2461,9 +2462,20 @@ def daemonize():
     os.dup2(os.open(os.devnull, os.O_RDWR), sys.stdin.fileno())
     os.dup2(os.open(os.devnull, os.O_RDWR), sys.stdout.fileno())
     os.dup2(os.open(os.devnull, os.O_RDWR), sys.stderr.fileno())
-    if 'pidfile' in conf:
-        with open(conf['pidfile'], "w") as ouf:
-            ouf.write(f"{os.getpid()}\n")
+
+
+def check_pidfile(pidfile):
+    """Exit if pid in pidfile is still active."""
+    if os.path.exists(pidfile):
+        with open(pidfile) as inf:
+            pid = int(inf.readline().rstrip())
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                pass
+            else:
+                sys.stderr.write(f"The pidfile at {conf['pidfile']} indicates that dawdle is still running at pid {pid}.  Remove the file or kill the process.\n")
+                sys.exit(1)
 
 
 def start_bot():
@@ -2488,8 +2500,16 @@ def start_bot():
     else:
         first_setup()
 
+    if 'pidfile' in conf:
+        check_pidfile(conf['pidfile'])
+
     if not conf['debug']:
         daemonize()
+
+    if 'pidfile' in conf:
+        with open(conf['pidfile'], "w") as ouf:
+            ouf.write(f"{os.getpid()}\n")
+        atexit.register(os.remove, conf['pidfile'])
 
     bot = DawdleBot(db)
     client = IRCClient(bot)
