@@ -2073,8 +2073,12 @@ class DawdleBot(object):
                     self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
                                  f"Next level in {duration(p.nextlvl)}.")
             self._players.backup_store()
-        if now % 3600 == 0 and len([p for p in op if p.level >= 45]) > len(op) * 0.15:
-            self.challenge_op()
+        # high level players fight each other randomly
+        hlp = [p for p in op if p.level >= 45]
+        if now % 3600 == 0 and len(hlp) > len(op) * 0.15:
+            self.challenge_opp(self.randchoice('pvp_combat', hlp))
+
+        # periodic warning about pause mode
         if now % 600 == 0 and self._pause:
             self.chanmsg("WARNING: Cannot write database in PAUSE mode!")
 
