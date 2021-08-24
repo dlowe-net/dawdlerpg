@@ -1866,6 +1866,7 @@ class DawdleBot(object):
 
     def cmd_hog(self, player, nick, args):
         """Trigger Hand of God."""
+        self.chanmsg(f"{nick} has summoned the Hand of God.")
         self.hand_of_god(self._players.online())
 
 
@@ -1904,6 +1905,7 @@ class DawdleBot(object):
         elif args == 'godsend':
             self.godsend()
         elif args == 'hog':
+            self.chanmsg(f"{nick} has summoned the Hand of God.")
             self.hand_of_god()
         elif args == 'teambattle':
             self.team_battle()
