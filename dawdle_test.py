@@ -448,6 +448,7 @@ class TestQuest(unittest.TestCase):
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
+        self.bot._state = "ready"
         self.bot.refresh_events()
 
 
