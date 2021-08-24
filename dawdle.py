@@ -784,7 +784,7 @@ class IRCClient:
 
     async def connect(self, addr, port):
         """Connect to IRC network and handle messages."""
-        reader, self._writer = await asyncio.open_connection(addr, port, ssl=True)
+        reader, self._writer = await asyncio.open_connection(addr, port, ssl=True, local_addr=conf.get("localaddr"))
         self._server = addr
         self._connected = True
         self._messages_sent = 0
