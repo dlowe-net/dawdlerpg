@@ -177,7 +177,7 @@ def read_config(path):
                 if not match:
                     log.warning("Invalid config line: "+line)
                     continue
-                key, val = match[1].lower(), match[2]
+                key, val = match[1].lower(), match[2].rstrip()
                 if key == "die":
                     log.critical(f"Please edit {path} to setup your bot's options.")
                     sys.exit(1)
@@ -1521,7 +1521,7 @@ class DawdleBot(object):
             self.notice(nick, f"For more information, see {conf['helpurl']}.")
         else:
             self.notice(nick, f"Available commands: {','.join(sorted(DawdleBot.CMDHELP.keys()))}")
-            self.notice(nick, f"Player help is at {conf['helpurl']}, admin help is at {conf['admincommurl']}.")
+            self.notice(nick, f"Player help is at {conf['helpurl']} ; admin help is at {conf['admincommurl']}")
 
 
     def cmd_version(self, player, nick, args):
