@@ -979,7 +979,9 @@ class IRCClient:
         # We know who is in the channel now
         if 'botopcmd' in conf:
             self.sendnow(re.sub(r'%botnick%', self._nick, conf['botopcmd']))
-        if 'userhost-in-names' not in self._caps:
+        if 'userhost-in-names' in self._caps:
+            self._bot.ready()
+        else:
             self.send(f"WHO {conf['botchan']}")
 
 
@@ -1325,6 +1327,10 @@ class DawdleBot(object):
         """Called when private message received."""
         if text == '':
             return
+        if self._state != "ready":
+            self.notice(src, "The bot isn't ready yet.")
+            return
+
         parts = text.split(' ', 1)
         cmd = parts[0].lower()
         if len(parts) == 2:
