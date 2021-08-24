@@ -160,7 +160,13 @@ def datapath(path):
 
 def read_config(path):
     """Return dict with contents of configuration file."""
-    newconf = {"servers": [], "okurls": [], "datadir": os.path.realpath(os.path.dirname(path))}
+    newconf = {
+        "servers": [],
+        "okurls": [],
+        # Non-idlerpg config needs defaults
+        "datadir": os.path.realpath(os.path.dirname(path)),
+        "backupdir": ".dbbackup",
+    }
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
     try:
