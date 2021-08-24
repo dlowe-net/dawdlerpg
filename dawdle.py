@@ -1182,12 +1182,12 @@ class IRCClient:
             self.send(f"NOTICE {target} :{line}")
 
 
-    def grant_voice(self, targets):
+    def grant_voice(self, *targets):
         for subset in grouper(targets, self._maxmodes):
             self.send(f"MODE {conf['botchan']} +{'v' * len(subset)} {' '.join(subset)}")
 
 
-    def revoke_voice(self, targets):
+    def revoke_voice(self, *targets):
         for subset in grouper(targets, self._maxmodes):
             self.send(f"MODE {conf['botchan']} -{'v' * len(subset)} {' '.join(subset)}")
 
@@ -1386,9 +1386,9 @@ class DawdleBot(object):
                 if u in online_nicks:
                     add_voice.append(u)
         if add_voice:
-            self._irc.grant_voice(add_voice)
+            self._irc.grant_voice(*add_voice)
         if remove_voice:
-            self._irc.revoke_voice(remove_voice)
+            self._irc.revoke_voice(*remove_voice)
 
 
     def disconnected(self):
