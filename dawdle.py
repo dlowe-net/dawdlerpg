@@ -2436,6 +2436,9 @@ async def mainloop(client):
     while not client.quitting:
         addr, port = conf['servers'][0].split(':')
         await client.connect(addr, port)
+        if not conf['reconnect']:
+            break
+        await asyncio.sleep(conf['reconnect_wait'])
 
 
 def daemonize():
