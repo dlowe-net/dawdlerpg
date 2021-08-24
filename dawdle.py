@@ -969,7 +969,7 @@ class IRCClient:
     def handle_352(self, msg):
         """RPL_WHOREPLY - Response to WHO command"""
         self.add_user(msg.args[4],
-                      f"{msg.args[1]}@{msg.args[2]}",
+                      f"{msg.src}!{msg.args[1]}@{msg.args[2]}",
                       [self._prefixmodes[p] for p in msg.args[5][1:]], # Format is [GH]\S*
                       msg.time)
 
@@ -984,11 +984,11 @@ class IRCClient:
         if 'userhost-in-names' not in self._caps:
             return
         prefixes=''.join(self._prefixmodes.keys())
-        userhost_re = re.compile(f"([{prefixes}]*)" + r"(\S+)!(\S+@\S+)")
+        userhost_re = re.compile(f"([{prefixes}]*)" + r"((\S+)!\S+@\S+)")
         for u in msg.trailing.split(' '):
             m = userhost_re.match(u)
             if m:
-                self.add_user(m[2], m[3], [self._prefixmodes[p] for p in m[1]], msg.time)
+                self.add_user(m[3], m[2], [self._prefixmodes[p] for p in m[1]], msg.time)
 
 
     def handle_366(self, msg):
@@ -1019,7 +1019,7 @@ class IRCClient:
 
     def handle_join(self, msg):
         """JOIN - bot or user joined the channel."""
-        self.add_user(msg.src, f"{msg.user}@{msg.host}", [], msg.time)
+        self.add_user(msg.src, f"{msg.src}!{msg.user}@{msg.host}", [], msg.time)
 
 
     def handle_part(self, msg):
