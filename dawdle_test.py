@@ -102,8 +102,7 @@ class TestIRCClient(unittest.TestCase):
 class FakeIRCClient(object):
     def __init__(self):
         self._nick = 'dawdlerpg'
-        self.userhosts = {}
-        self.usermodes = {}
+        self._users = {}
         self.chanmsgs = []
         self.notices = {}
 

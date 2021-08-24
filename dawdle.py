@@ -772,6 +772,16 @@ class IRCClient:
     Message = collections.namedtuple('Message', ['tags', 'src', 'user', 'host', 'cmd', 'args', 'trailing', 'line', 'time'])
 
 
+    class User:
+        """An IRC user in the channel."""
+
+        def __init__(self, nick, userhost, modes, joined):
+            self.nick = nick
+            self.userhost = userhost
+            self.modes = set(modes)
+            self.joined = joined
+
+
     def __init__(self, bot):
         self._bot = bot
         self._writer = None
@@ -793,8 +803,7 @@ class IRCClient:
         self._prefixmodes = {}
         self._maxmodes = 3
         self._modetypes = {}
-        self.userhosts = {}            # all players in the channel and their userhost
-        self.usermodes = {}            # all players in the channel and their modes
+        self._users = {}
         self._caps = set()             # all enabled capabilities
         self.sendnow("CAP REQ :multi-prefix userhost-in-names")
         self.sendnow("CAP END")
@@ -952,8 +961,10 @@ class IRCClient:
 
     def handle_352(self, msg):
         """RPL_WHOREPLY - Response to WHO command"""
-        self.userhosts[msg.args[4]] = f"{msg.args[1]}@{msg.args[2]}"
-        self.usermodes[msg.args[4]] = set([self._prefixmodes[p] for p in msg.args[5][1:]]) # Format is [GH]\S*
+        self._users[msg.args[4]] = IRCClient.User(msg.args[4],
+                                                  f"{msg.args[1]}@{msg.args[2]}",
+                                                  [self._prefixmodes[p] for p in msg.args[5][1:]], # Format is [GH]\S*
+                                                  msg.time)
 
 
     def handle_315(self, msg):
@@ -970,8 +981,7 @@ class IRCClient:
         for u in msg.trailing.split(' '):
             m = userhost_re.match(u)
             if m:
-                self.userhosts[m[2]] = m[3]
-                self.usermodes[m[2]] = set([self._prefixmodes[p] for p in m[1]])
+                self._users[m[2]] = IRCClient.User(m[2], m[3], [self._prefixmodes[p] for p in m[1]], msg.time)
 
 
     def handle_366(self, msg):
@@ -1003,20 +1013,18 @@ class IRCClient:
     def handle_join(self, msg):
         """JOIN - bot or user joined the channel."""
         if msg.src != self._nick:
-            self.userhosts[msg.src] = f"{msg.user}@{msg.host}"
-            self.usermodes[msg.src] = set()
+            self._users[msg.src] = IRCClient.User(msg.src, f"{msg.user}@{msg.host}", [], msg.time)
+
 
     def handle_part(self, msg):
         """PART - bot or user left the channel."""
-        del self.userhosts[msg.src]
-        del self.usermodes[msg.src]
+        del self.user[msg.src]
         self._bot.nick_parted(msg.src)
 
 
     def handle_kick(self, msg):
         """KICK - user was kicked from the channel."""
-        del self.userhosts[msg.args[0]]
-        del self.usermodes[msg.args[0]]
+        del self.user[msg.src]
         self._bot.nick_kicked(msg.args[0])
 
 
@@ -1041,20 +1049,19 @@ class IRCClient:
                 if modetype != 2:
                     continue
                 if change[0] == '+':
-                    self.usermodes[param].add(change[1])
+                    self._users[param].modes.add(change[1])
                     if param == self._nick and change[1] == 'o':
                         # Acquiring op is special to the bot
                         self._bot.acquired_ops()
                 else:
-                    self.usermodes[param].discard(change[1])
+                    self._users[param].modes.discard(change[1])
 
 
     def handle_nick(self, msg):
         """NICK - bot or user had its nick changed."""
-        self.userhosts[new_nick] = self.userhosts[old_nick]
-        del self.userhosts[old_nick]
-        self.usermodes[new_nick] = self.usermodes[old_nick]
-        del self.usermodes[old_nick]
+        self._users[new_nick] = self._users[old_nick]
+        self._users[new_nick].nick = new_nick
+        del self._users[old_nick]
 
         if msg.src == self._nick:
             # Update my nick
@@ -1074,8 +1081,7 @@ class IRCClient:
         if msg.src == conf['botnick']:
             # Grab my nick that someone left
             self.nick(conf['botnick'])
-        del self.userhosts[msg.src]
-        del self.usermodes[msg.src]
+        del self._users[msg.src]
         if conf['detectsplits'] and re.match(r'\S+\.\S+ \S+\.\S+', msg.trailing):
             # Don't penalize on netsplit
             self._bot.netsplit(msg.src)
@@ -1098,6 +1104,15 @@ class IRCClient:
             self._bot.private_message(msg.src, msg.trailing)
         else:
             self._bot.channel_message(msg.src, msg.trailing)
+
+
+    def match_user(self, nick, userhost):
+        """Return True if the nick and userhost match an existing user."""
+        return (nick in self._users and userhost == self._users[nick].userhost)
+
+
+    def bot_has_ops(self):
+        return ('o' in self._users[self._nick].modes)
 
 
     def nick(self, nick):
@@ -1277,7 +1292,7 @@ class DawdleBot(object):
         self.refresh_events()
         autologin = []
         for p in self._players.online():
-            if p.nick in self._irc.userhosts and p.userhost == self._irc.userhosts[p.nick]:
+            if self._irc.match_user(p.nick, p.userhost):
                 autologin.append(p.name)
             else:
                 p.online = False
@@ -1285,7 +1300,7 @@ class DawdleBot(object):
         self._players.write()
         if autologin:
             self.chanmsg(f"{len(autologin)} user{plural(len(autologin))} automatically logged in; accounts: {', '.join(autologin)}")
-            if 'o' in self._irc.usermodes[self._irc._nick]:
+            if self._irc.bot_has_ops():
                 self.acquired_ops()
         else:
             self.chanmsg("0 users qualified for auto login.")
@@ -1301,8 +1316,8 @@ class DawdleBot(object):
         online_nicks = set([p.nick for p in self._players.online()])
         add_voice = []
         remove_voice = []
-        for u in self._irc.usermodes.keys():
-            if 'v' in self._irc.usermodes[u]:
+        for u in self._irc._users.keys():
+            if 'v' in self._irc._users[u].modes:
                 if u not in online_nicks:
                     remove_voice.append(u)
             else:
@@ -1515,7 +1530,7 @@ class DawdleBot(object):
         if player:
             self.notice(nick, f"Sorry, you are already online as {player.name}")
             return
-        if nick not in self._irc.userhosts:
+        if nick not in self._irc._users:
             self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
             return
 
@@ -1531,12 +1546,12 @@ class DawdleBot(object):
             self.notice(nick, f"Wrong password.")
             return
         # Success!
-        if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
+        if conf['voiceonlogin'] and self._irc.bot_has_ops():
             self._irc.mode(conf['botchan'], "+v", nick)
         player = self._players[pname]
         player.online = True
         player.nick = nick
-        player.userhost = self._irc.userhosts[nick]
+        player.userhost = self._irc._users[nick].userhost
         player.lastlogin = time.time()
         self._players.write()
         self.chanmsg(f"{player.name}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
@@ -1548,7 +1563,7 @@ class DawdleBot(object):
         if player:
             self.notice(nick, f"Sorry, you are already online as {player.name}")
             return
-        if nick not in self._irc.userhosts:
+        if nick not in self._irc._users:
             self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
             return
         if self._pause:
@@ -1587,8 +1602,8 @@ class DawdleBot(object):
             player = self._players.new_player(pname, pclass, ppass)
             player.online = True
             player.nick = nick
-            player.userhost = self._irc.userhosts[nick]
-            if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
+            player.userhost = self._irc._users[nick].userhost
+            if conf['voiceonlogin'] and self._irc.bot_has_ops():
                 self._irc.mode(conf['botchan'], "+v", nick)
             self.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
             self.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
@@ -1606,7 +1621,7 @@ class DawdleBot(object):
             self.notice(nick, f"Account {player.name} removed.")
             self.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
             self._players.delete_player(player.name)
-            if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
+            if conf['voiceonlogin'] and self._irc.bot_has_ops():
                 self._irc.mode(conf['botchan'], "-v", nick)
 
 
@@ -1629,7 +1644,7 @@ class DawdleBot(object):
         player.online = False
         player.lastlogin = time.time()
         self._players.write()
-        if conf['voiceonlogin'] and 'o' in self._irc.usermodes[self._irc._nick]:
+        if conf['voiceonlogin'] and self._irc.bot_has_ops():
                 self._irc.mode(conf['botchan'], "-v", nick)
         self.penalize(player, "logout")
 
@@ -1917,7 +1932,7 @@ class DawdleBot(object):
         """Kick players offline if they were disconnected for too long."""
         expiration = time.time() - conf['splitwait']
         for p in self._players.online():
-            if p.nick not in self._irc.userhosts and p.lastlogin < expiration:
+            if p.nick not in self._irc._users and p.lastlogin < expiration:
                 print(f"Expiring {p.nick} who was logged in as {p.nick} but was lost in a netsplit.")
                 self.penalize(player, "dropped")
                 p.online = False
