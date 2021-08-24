@@ -2019,7 +2019,7 @@ class DawdleBot(object):
             while self._state == 'ready':
                 await asyncio.sleep(conf['self_clock'])
                 now = time.time()
-                self.rpcheck(now, int(now - last_time))
+                self.rpcheck(int(now), int(now - last_time))
                 last_time = now
         except Exception as err:
             print(err)
