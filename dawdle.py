@@ -133,13 +133,12 @@ def plural(num, singlestr='', pluralstr='s'):
     return pluralstr
 
 
-def grouper(iterable, n, fillvalue=None):
+def grouper(iterable, n):
     """Collect data into fixed-length chunks or blocks
 
     grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
-    From python itertools recipes"""
-    args = [iter(iterable)] * n
-    return itertools.zip_longest(fillvalue=fillvalue, *args)
+    """
+    return [iterable[i:i+n] for i in range(0, len(iterable), n)]
 
 
 def duration(secs):
@@ -1183,10 +1182,20 @@ class IRCClient:
             self.send(f"NOTICE {target} :{line}")
 
 
+    def grant_voice(self, targets):
+        for subset in grouper(targets, self._maxmodes):
+            self.send(f"MODE {conf['botchan']} +{'v' * len(subset)} {' '.join(subset)}")
+
+
+    def revoke_voice(self, targets):
+        for subset in grouper(targets, self._maxmodes):
+            self.send(f"MODE {conf['botchan']} -{'v' * len(subset)} {' '.join(subset)}")
+
+
     def mode(self, target, *modeinfo):
         """Send mode change request."""
-        for modes in grouper(modeinfo, self._maxmodes * 2):
-            self.send(f"MODE {target} {' '.join([m for m in modes if m is not None])}")
+        for modes in grouper(modeinfo, self._maxmodes):
+            self.send(f"MODE {target} {' '.join(modes)}")
 
 
     def chanmsg(self, text):
@@ -1376,9 +1385,9 @@ class DawdleBot(object):
                 if u in online_nicks:
                     add_voice.append(u)
         if add_voice:
-            self._irc.mode(conf['botchan'], *itertools.chain.from_iterable(zip(itertools.repeat('+v'), add_voice)))
+            self._irc.grant_voice(add_voice)
         if remove_voice:
-            self._irc.mode(conf['botchan'], *itertools.chain.from_iterable(zip(itertools.repeat('-v'), remove_voice)))
+            self._irc.revoke_voice(remove_voice)
 
 
     def disconnected(self):
@@ -1599,7 +1608,7 @@ class DawdleBot(object):
             return
         # Success!
         if conf['voiceonlogin'] and self._irc.bot_has_ops():
-            self._irc.mode(conf['botchan'], "+v", nick)
+            self._irc.grant_voice(nick)
         player = self._players[pname]
         player.online = True
         player.nick = nick
@@ -1656,7 +1665,7 @@ class DawdleBot(object):
             player.nick = nick
             player.userhost = self._irc._users[nick].userhost
             if conf['voiceonlogin'] and self._irc.bot_has_ops():
-                self._irc.mode(conf['botchan'], "+v", nick)
+                self._irc.grant_voice(nick)
             self.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
             self.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
             self.notice(nick, "NOTE: The point of the game is to see who can idle the longest. As such, talking in the channel, parting, quitting, and changing nicks all penalize you.")
@@ -1674,7 +1683,7 @@ class DawdleBot(object):
             self.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
             self._players.delete_player(player.name)
             if conf['voiceonlogin'] and self._irc.bot_has_ops():
-                self._irc.mode(conf['botchan'], "-v", nick)
+                self._irc.revoke_voice(nick)
 
 
     def cmd_newpass(self, player, nick, args):
@@ -1697,7 +1706,7 @@ class DawdleBot(object):
         player.lastlogin = time.time()
         self._players.write()
         if conf['voiceonlogin'] and self._irc.bot_has_ops():
-                self._irc.mode(conf['botchan'], "-v", nick)
+                self._irc.revoke_voice(nick)
         self.penalize(player, "logout")
 
 
