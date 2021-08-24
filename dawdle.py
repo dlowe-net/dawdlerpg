@@ -1567,7 +1567,7 @@ class DawdleBot(object):
         self.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
 
 
-    def cmd_announce(self, player. nick, args):
+    def cmd_announce(self, player, nick, args):
         """Send a message to the channel via the bot."""
         self.chanmsg(args)
 
