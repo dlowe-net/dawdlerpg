@@ -179,7 +179,7 @@ def read_config(path):
                 elif key == "server":
                     newconf["servers"].append(val)
                 elif key == "okurl":
-                    newconf["servers"].append(val)
+                    newconf["okurls"].append(val)
                 else:
                     newconf[key] = parse_val(val)
     except OSError as err:
@@ -953,6 +953,7 @@ class IRCClient:
         self.mode(conf['botnick'], conf['botmodes'])
         self.join(conf['botchan'])
 
+
     def handle_422(self, msg):
         """ERR_NOTMOTD - server is ready, but without a MOTD"""
         self.mode(conf['botnick'], conf['botmodes'])
@@ -961,10 +962,10 @@ class IRCClient:
 
     def handle_352(self, msg):
         """RPL_WHOREPLY - Response to WHO command"""
-        self._users[msg.args[4]] = IRCClient.User(msg.args[4],
-                                                  f"{msg.args[1]}@{msg.args[2]}",
-                                                  [self._prefixmodes[p] for p in msg.args[5][1:]], # Format is [GH]\S*
-                                                  msg.time)
+        self.add_user(msg.args[4],
+                      f"{msg.args[1]}@{msg.args[2]}",
+                      [self._prefixmodes[p] for p in msg.args[5][1:]], # Format is [GH]\S*
+                      msg.time)
 
 
     def handle_315(self, msg):
@@ -981,7 +982,7 @@ class IRCClient:
         for u in msg.trailing.split(' '):
             m = userhost_re.match(u)
             if m:
-                self._users[m[2]] = IRCClient.User(m[2], m[3], [self._prefixmodes[p] for p in m[1]], msg.time)
+                self.add_user(m[2], m[3], [self._prefixmodes[p] for p in m[1]], msg.time)
 
 
     def handle_366(self, msg):
@@ -1012,20 +1013,19 @@ class IRCClient:
 
     def handle_join(self, msg):
         """JOIN - bot or user joined the channel."""
-        if msg.src != self._nick:
-            self._users[msg.src] = IRCClient.User(msg.src, f"{msg.user}@{msg.host}", [], msg.time)
+        self.add_user(msg.src, f"{msg.user}@{msg.host}", [], msg.time)
 
 
     def handle_part(self, msg):
         """PART - bot or user left the channel."""
-        del self.user[msg.src]
+        self.remove_user(msg.src)
         self._bot.nick_parted(msg.src)
 
 
     def handle_kick(self, msg):
         """KICK - user was kicked from the channel."""
-        del self.user[msg.src]
-        self._bot.nick_kicked(msg.args[0])
+        self.remove_user(msg.args[1])
+        self._bot.nick_kicked(msg.args[1])
 
 
     def handle_mode(self, msg):
@@ -1081,7 +1081,7 @@ class IRCClient:
         if msg.src == conf['botnick']:
             # Grab my nick that someone left
             self.nick(conf['botnick'])
-        del self._users[msg.src]
+        self.remove_user(msg.src)
         if conf['detectsplits'] and re.match(r'\S+\.\S+ \S+\.\S+', msg.trailing):
             # Don't penalize on netsplit
             self._bot.netsplit(msg.src)
@@ -1093,7 +1093,7 @@ class IRCClient:
 
     def handle_notice(self, msg):
         """NOTICE - Message sent, used to prevent loops in bots."""
-        if msg.args[0] != self._nick:
+        if msg.args[0] != self._nick and self.user_is_ok(msg):
             # we ignore private notices
             self._bot.channel_notice(msg.src, msg.trailing)
 
@@ -1102,8 +1102,47 @@ class IRCClient:
         """PRIVMSG - Message sent."""
         if msg.args[0] == self._nick:
             self._bot.private_message(msg.src, msg.trailing)
-        else:
+        elif self.user_is_ok(msg):
             self._bot.channel_message(msg.src, msg.trailing)
+
+
+    def add_user(self, nick, userhost, modes, joined):
+        self._users[nick] = IRCClient.User(nick, userhost, modes, joined)
+
+
+    def remove_user(self, nick):
+        del self._users[nick]
+        if len(self._users) == 1 and not self.bot_has_ops():
+            # Try to acquire ops by leaving and joining
+            self.sendnow(f"PART {conf['botchan']} :Acquiring ops")
+            self.sendnow(f"JOIN {conf['botchan']}")
+
+
+    def user_is_ok(self, msg):
+        """Check to see if msg should cause user to be kickbanned."""
+        if not conf["doban"]:
+            # Bot doesn't do bans
+            return True
+        if not self.bot_has_ops():
+            # Bot can't do bans
+            return True
+        if msg.src == self._nick:
+            # Bot is always ok
+            return True
+        if msg.src not in self._users:
+            # Not in channel - maybe channel could use mode +n
+            return False
+        if msg.time > self._users[msg.src].joined + 90:
+            # Been in channel for a while, prob ok?
+            return True
+
+        for host in re.findall(r"https?://([^/]+)/", msg.trailing):
+            if host not in conf["okurls"]:
+                # User not okay
+                print(f"Found host {host} not in {repr(conf['okurls'])}")
+                self.kickban(msg.src)
+                return False
+        return True
 
 
     def match_user(self, nick, userhost):
@@ -1112,7 +1151,14 @@ class IRCClient:
 
 
     def bot_has_ops(self):
-        return ('o' in self._users[self._nick].modes)
+        """Return True if the bot has ops in the channel."""
+        return (self._nick in self._users and 'o' in self._users[self._nick].modes)
+
+
+    def kickban(self, nick):
+        """Kick a nick from the channel and ban them."""
+        self.sendnow(f"MODE {conf['botchan']} +b {nick}")
+        self.sendnow(f"KICK {conf['botchan']} {nick} :No advertising")
 
 
     def nick(self, nick):
@@ -1425,7 +1471,7 @@ class DawdleBot(object):
 
     def nick_kicked(self, target):
         """Called when someone was kicked."""
-        player = self._players.from_nick(src)
+        player = self._players.from_nick(target)
         if player:
             self.penalize(player, "kick")
             player.online = False
