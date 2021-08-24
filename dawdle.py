@@ -1433,14 +1433,18 @@ class DawdleBot(object):
         if args:
             if args in DawdleBot.CMDHELP:
                 self.notice(nick, DawdleBot.CMDHELP[args])
-                return
-            self.notice(nick, f"{args} is not a command you can get help on.")
+            else:
+                self.notice(nick, f"{args} is not a command you can get help on.")
+            return
         if not player:
             self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWALL)}")
+            self.notice(nick, f"For more information, see {conf['helpurl']}.")
         elif not player.isadmin:
             self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWPLAYERS)}")
+            self.notice(nick, f"For more information, see {conf['helpurl']}.")
         else:
             self.notice(nick, f"Available commands: {','.join(sorted(DawdleBot.CMDHELP.keys()))}")
+            self.notice(nick, f"Player help is at {conf['helpurl']}, admin help is at {conf['admincommurl']}.")
 
 
     def cmd_version(self, player, nick, args):
