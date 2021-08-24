@@ -1247,6 +1247,7 @@ class DawdleBot(object):
         "removeme": "removeme <password> - Delete your character.",
         "status": "status - Show bot status.",
         "whoami": "whoami - Shows who you are logged in as.",
+        "announce": "announce - Sends a message to the channel.",
         "backup": "backup - Backup the player db.",
         "chclass": "chclass <account> <new class> - Change the character class of the account.",
         "chpass": "chpass <account> <new password> - Change the password of the account.",
@@ -1564,6 +1565,11 @@ class DawdleBot(object):
     def cmd_whoami(self, player, nick, args):
         """display game character information."""
         self.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
+
+
+    def cmd_announce(self, player. nick, args):
+        """Send a message to the channel via the bot."""
+        self.chanmsg(args)
 
 
     def cmd_status(self, player, nick, args):
