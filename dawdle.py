@@ -1923,7 +1923,18 @@ class DawdleBot(object):
         elif args == 'goodness':
             self.goodness(self._players.online())
         elif args == 'battle':
-            self.challenge_opp(player)
+            op = [p for p in self._players.online()]
+            self.challenge_opp(op)
+        elif args == 'quest':
+            if self._quest:
+                self.notice(nick, "There's already a quest on.")
+                return
+            qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
+            if len(qp) < 4:
+                self.notice(nick, "There's not enough eligible players.")
+                return
+            self.notice(nick, "Starting quest.")
+            self.quest_start(int(time.time))
 
 
     def cmd_quest(self, player, nick, args):
