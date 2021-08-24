@@ -147,7 +147,7 @@ class TestPvPBattle(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = 'modsfile.txt'
+        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -295,7 +295,7 @@ class TestTeamBattle(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = 'modsfile.txt'
+        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -345,7 +345,7 @@ class TestEvilness(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = 'modsfile.txt'
+        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -380,7 +380,7 @@ class TestGoodness(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = 'modsfile.txt'
+        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -441,9 +441,10 @@ class TestQuest(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['datadir'] = os.path.join(os.path.dirname(__file__), "data")
         dawdle.conf['eventsfile'] = "events.txt"
         dawdle.conf['writequestfile'] = True
-        dawdle.conf['questfilename'] = "testquestfile.txt"
+        dawdle.conf['questfilename'] = "/tmp/testquestfile.txt"
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -578,9 +579,10 @@ class TestRPCheck(unittest.TestCase):
         dawdle.conf['rpstep'] = 1.14
         dawdle.conf['detectsplits'] = True
         dawdle.conf['splitwait'] = 300
+        dawdle.conf['datadir'] = os.path.join(os.path.dirname(__file__), "data")
         dawdle.conf['eventsfile'] = "events.txt"
         dawdle.conf['writequestfile'] = True
-        dawdle.conf['questfilename'] = "testquestfile.txt"
+        dawdle.conf['questfilename'] = "/tmp/testquestfile.txt"
         dawdle.conf['self_clock'] = 1
         dawdle.conf['mapx'] = 500
         dawdle.conf['mapy'] = 500

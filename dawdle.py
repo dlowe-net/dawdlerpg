@@ -102,8 +102,10 @@ parser.add_argument("--rpstep", type=float)
 parser.add_argument("--rpbase", type=int)
 parser.add_argument("--rppenstep", type=float)
 parser.add_argument("-d", "--dbfile", "--irpgdb", "--db")
+parser.add_argument("config_file")
 
-args = parser.parse_args()
+
+args = None
 conf = {}
 start_time = int(time.time())
 
@@ -148,9 +150,17 @@ def duration(secs):
     return f"{d} day{plural(d)}, {h:02d}:{m:02d}:{int(secs):02d}"
 
 
+def datapath(path):
+    """Return path relative to datadir unless path is absolute."""
+    global conf
+    if os.path.isabs(path):
+        return path
+    return os.path.join(conf["datadir"], path)
+
+
 def read_config(path):
     """Return dict with contents of configuration file."""
-    newconf = {"servers": [], "okurls": []}
+    newconf = {"servers": [], "okurls": [], "datadir": os.path.realpath(os.path.dirname(path))}
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
     try:
@@ -333,19 +343,19 @@ class PlayerStore(object):
     def readall(self):
         pass
 
-    def writeall(self):
+    def writeall(self, players):
         pass
 
     def close(self):
         pass
 
-    def new(self):
+    def new(self, player):
         pass
 
-    def rename(self):
+    def rename(self, old, new):
         pass
 
-    def delete(self):
+    def delete(self, pname):
         pass
 
 
@@ -398,8 +408,10 @@ class IdleRPGPlayerStore(PlayerStore):
 
     def backup(self):
         """Backs up database to a directory."""
-        os.makedirs(".dbbackup", exist_ok=True)
-        shutil.copyfile(conf['dbfile'], f".dbbackup/{conf['dbfile']}{int(time.time())}")
+        os.makedirs(datapath(conf["backupdir"]), exist_ok=True)
+        backup_path = os.path.join(datapath(conf["backupdir"]),
+                                   f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{conf['dbfile']}")
+        shutil.copyfile(self._dbpath, backup_path)
 
 
     def readall(self):
@@ -540,9 +552,11 @@ class Sqlite3PlayerStore(PlayerStore):
 
     def backup(self):
         """Backs up database to a directory."""
-        os.makedirs(".dbbackup", exist_ok=True)
+        os.makedirs(datapath(conf["backupdir"]), exist_ok=True)
         with self._connect() as con:
-            backup_db = sqlite3.connect(f".dbbackup/{conf['dbfile']}{int(time.time())}")
+            backup_path = os.path.join(datapath(conf["backupdir"]),
+                                       f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{conf['dbfile']}")
+            backup_db = sqlite3.connect(backup_path)
             with backup_db:
                 self._db.backup(backup_db)
             backup_db.close()
@@ -719,7 +733,7 @@ def first_setup():
 
     if db.exists():
         return
-    pname = input(f"{conf['dbfile']} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf['owner']}]: ")
+    pname = input(f"{datapath(conf['dbfile'])} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf['owner']}]: ")
     if pname == "":
         pname = conf["owner"]
     pclass = input("Enter a character class for this account: ")
@@ -738,7 +752,7 @@ def first_setup():
     p.isadmin = True
     db.write()
 
-    print(f"OK, wrote you into {conf['dbfile']}")
+    print(f"OK, wrote you into {datapath(conf['dbfile'])}")
 
 
 class IRCClient:
@@ -1244,7 +1258,7 @@ class DawdleBot(object):
         if 'chanmsgs' in self._silence:
             return
         self._irc.chanmsg(text)
-        with open(conf['modsfile'], "a") as ouf:
+        with open(datapath(conf['modsfile']), "a") as ouf:
             ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
 
 
@@ -1542,7 +1556,7 @@ class DawdleBot(object):
         parts = args.split(' ', 2)
         if len(parts) != 3:
             self.notice(nick, "Try: REGISTER <username> <password> <char class>")
-            self.notice(nick, "i.e. REGISTER Poseidon MyPassword God of the Sea")
+            self.notice(nick, "i.e. REGISTER Artemis MyPassword Goddess of the Hunt")
             return
         pname, ppass, pclass = parts
         if pname in self._players:
@@ -1735,7 +1749,7 @@ class DawdleBot(object):
     def cmd_rehash(self, player, nick, args):
         """Re-read configuration file."""
         global conf
-        conf = read_config(args.conf)
+        conf = read_config(args.config_file)
         self.notice(nick, "Configuration reloaded.")
 
 
@@ -1878,11 +1892,11 @@ class DawdleBot(object):
 
     def refresh_events(self):
         """Read events file if it has changed."""
-        if self._events_loaded == os.path.getmtime(conf['eventsfile']):
+        if self._events_loaded == os.path.getmtime(datapath(conf['eventsfile'])):
             return
 
         self._events = {}
-        with open(conf['eventsfile']) as inf:
+        with open(datapath(conf['eventsfile'])) as inf:
             for line in inf.readlines():
                 line = line.rstrip()
                 if line != "":
@@ -2411,7 +2425,7 @@ class DawdleBot(object):
         """Write a descriptive quest file for the web interface."""
         if not conf['writequestfile']:
             return
-        with open(conf['questfilename'], 'w') as ouf:
+        with open(datapath(conf['questfilename']), 'w') as ouf:
             if not self._quest:
                 # leave behind an empty quest file
                 return
@@ -2458,6 +2472,7 @@ def daemonize():
     pid = os.fork()
     if pid > 0:
         os._exit(0)
+    os.chdir("/")
     signal.signal(signal.SIGTSTP, signal.SIG_IGN)
     signal.signal(signal.SIGTTIN, signal.SIG_IGN)
     signal.signal(signal.SIGTTOU, signal.SIG_IGN)
@@ -2477,14 +2492,16 @@ def check_pidfile(pidfile):
             except OSError:
                 pass
             else:
-                sys.stderr.write(f"The pidfile at {conf['pidfile']} indicates that dawdle is still running at pid {pid}.  Remove the file or kill the process.\n")
+                sys.stderr.write(f"The pidfile at {pidfile} indicates that dawdle is still running at pid {pid}.  Remove the file or kill the process.\n")
                 sys.exit(1)
 
 
 def start_bot():
     """Main entry point for bot."""
+    global args
     global conf
-    conf = read_config(args.conf)
+    args = parser.parse_args()
+    conf = read_config(args.config_file)
 
     # override configurations from command line
     for k,v in vars(args).items():
@@ -2496,7 +2513,7 @@ def start_bot():
         conf["okurls"] = args.okurl
 
     global db
-    db = PlayerDB(IdleRPGPlayerStore(conf["dbfile"]))
+    db = PlayerDB(IdleRPGPlayerStore(datapath(conf["dbfile"])))
     if db.exists():
         db.backup_store()
         db.load()
@@ -2504,15 +2521,15 @@ def start_bot():
         first_setup()
 
     if 'pidfile' in conf:
-        check_pidfile(conf['pidfile'])
+        check_pidfile(datapath(conf['pidfile']))
 
     if not conf['debug']:
         daemonize()
 
     if 'pidfile' in conf:
-        with open(conf['pidfile'], "w") as ouf:
+        with open(datapath(conf['pidfile']), "w") as ouf:
             ouf.write(f"{os.getpid()}\n")
-        atexit.register(os.remove, conf['pidfile'])
+        atexit.register(os.remove, datapath(conf['pidfile']))
 
     bot = DawdleBot(db)
     client = IRCClient(bot)

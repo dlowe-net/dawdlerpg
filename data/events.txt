@@ -1,0 +1,27 @@
+# Calamities - these add to a player's time to level
+C was struck by lightning
+C mauled by a bear
+C cursed by a swamp witch
+C fell into a bog
+C DIED... a bit
+
+# Godsends - these subtract from a player's time to level
+G was sprinkled with fairy dust
+G found a pot of gold
+G met a friendly bard
+G found a magical spring
+G drank a potent elixir
+
+# Quest mode 1 - these are simply timed quests
+Q1 solve the theft of the five rings of Macala
+Q1 deliver a priceless scroll to the Azar library
+Q1 rescue an imprisoned genie from the palace of the Thutharks
+Q1 impersonate cultists to infiltrate a dark temple
+Q1 unearth the secret of the Twin Pines
+
+# Quest mode 2 - these are two-stage navigation quests
+Q2 464 23 113 187 search for a hostage nymph and heal her broken tree
+Q2 321 488 137 56 complete the Pisan pilgrimage from the shine of Katu to Mount Irta
+Q2 304 269 70 417 secretly follow a Esteri assassin and report on her activities
+Q2 447 432 359 318 travel to the Orod volcano to retrieve a lava-proof circlet and bring it to a country village
+Q2 326 31 246 133 must spring a Jonast noble from a prison and escort him back to his ancestral lands.
