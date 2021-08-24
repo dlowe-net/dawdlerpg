@@ -1517,7 +1517,7 @@ class DawdleBot(object):
             self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWALL)}")
             self.notice(nick, f"For more information, see {conf['helpurl']}.")
         elif not player.isadmin:
-            self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWPLAYERS)}")
+            self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWALL + DawdleBot.ALLOWPLAYERS)}")
             self.notice(nick, f"For more information, see {conf['helpurl']}.")
         else:
             self.notice(nick, f"Available commands: {','.join(sorted(DawdleBot.CMDHELP.keys()))}")
