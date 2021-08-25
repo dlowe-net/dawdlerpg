@@ -43,11 +43,6 @@ log = logging.getLogger()
 
 VERSION = "1.0.0"
 
-# Penalties and their description
-PENALTIES = {"quit": 20, "dropped": 10, "nick": 30, "message": 1, "part": 200, "kick": 250, "logout": 20}
-PENDESC = {"quit": "quitting", "dropped": "dropped connection", "nick": "changing nicks", "message": "messaging", "part": "parting", "kick": "being kicked", "logout": "LOGOUT command"}
-
-
 parser = argparse.ArgumentParser(description="IdleRPG clone")
 parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
 parser.add_argument("config_file", help="Path to configuration file.  You must specify this.")
@@ -122,8 +117,16 @@ def read_config(path):
         "loglevel": "DEBUG",
         "throttle": True,
         "throttle_rate": 4,
-        "throttle_period": 1
+        "throttle_period": 1,
+        "pennick": 30,
+        "penmessage": 1,
+        "penpart": 200,
+        "penkick": 250,
+        "penquit": 20,
+        "pendropped": 20,
+        "penlogout": 20
     }
+
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
     try:
@@ -1927,7 +1930,8 @@ class DawdleBot(object):
 
     def penalize(self, player, kind, text=None):
         """Exact penalities on a transgressing player."""
-        if PENALTIES[kind] == 0:
+        penalty = conf["pen"+kind]
+        if penalty == 0:
             return
 
         if self._quest and player in self._quest.questors:
@@ -1944,7 +1948,6 @@ class DawdleBot(object):
             self._quest = None
             self._qtimer = time.time() + 12 * 3600
 
-        penalty = PENALTIES[kind]
         if text:
             penalty *= len(text)
         penalty *= int(conf['rppenstep'] ** player.level)
@@ -1953,7 +1956,14 @@ class DawdleBot(object):
         setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
         player.nextlvl += penalty
         if kind not in ['dropped', 'quit']:
-            self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {PENDESC[kind]}.")
+            pendesc = {"quit": "quitting",
+                       "dropped": "dropped connection",
+                       "nick": "changing nicks",
+                       "message": "messaging",
+                       "part": "parting",
+                       "kick": "being kicked",
+                       "logout": "LOGOUT command"}[kind]
+            self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {pendesc}.")
 
     def refresh_events(self):
         """Read events file if it has changed."""
