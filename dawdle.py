@@ -1879,8 +1879,7 @@ class DawdleBot(object):
         elif args == 'goodness':
             self.goodness(self._players.online())
         elif args == 'battle':
-            op = [p for p in self._players.online()]
-            self.challenge_opp(op)
+            self.challenge_opp(self.randchoice('triggered_battle', self._players.online()))
         elif args == 'quest':
             if self._quest:
                 self.notice(nick, "There's already a quest on.")
