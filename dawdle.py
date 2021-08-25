@@ -820,7 +820,7 @@ class IRCClient:
         self._messages_sent = max(0, self._messages_sent - THROTTLE_RATE)
         while self._writeq:
             while self._writeq and self._messages_sent < THROTTLE_RATE:
-                log.debug("(%d)~> %s", self._messages_sent, str(self._writeq[0], encoding='utf8'))
+                log.debug("(%d)~> %s", self._messages_sent, str(self._writeq[0], encoding='utf8').rstrip())
                 self._writer.write(self._writeq[0])
                 self._messages_sent += 1
                 self._bytes_sent += len(self._writeq[0])
