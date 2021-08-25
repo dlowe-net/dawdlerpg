@@ -61,23 +61,6 @@ args = None
 conf = {}
 start_time = int(time.time())
 
-NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
-
-
-def parse_val(s):
-    """Parse values used in the configuration file."""
-    if s in ["on", "yes", "true"]:
-        return True
-    if s in ["off", "no", "false"]:
-        return False
-    isnum = NUMERIC_RE.match(s)
-    if isnum:
-        if isnum[1]:
-            return float(s)
-        return int(s)
-    return s
-
-
 def plural(num, singlestr='', pluralstr='s'):
     """Return singlestr when num is 1, otherwise pluralstr."""
     if num == 1:
@@ -107,6 +90,28 @@ def datapath(path):
     if os.path.isabs(path):
         return path
     return os.path.join(conf["datadir"], path)
+
+
+DURATION_RE = re.compile(r"(\d+)([dhms])")
+NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
+
+
+def parse_val(s):
+    """Parse values used in the configuration file."""
+    if s in ["on", "yes", "true"]:
+        return True
+    if s in ["off", "no", "false"]:
+        return False
+    istime = DURATION_RE.match(s)
+    if istime:
+        return int(istime[1]) * {"d":86400, "h": 3600, "m": 60, "s": 1}[istime[2]]
+
+    isnum = NUMERIC_RE.match(s)
+    if isnum:
+        if isnum[1]:
+            return float(s)
+        return int(s)
+    return s
 
 
 def read_config(path):

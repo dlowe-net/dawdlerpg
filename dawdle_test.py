@@ -572,7 +572,7 @@ class TestAdminCommands(unittest.TestCase):
         self.assertIn(op[3].name, self.bot._players)
 
 
-class TestRPCheck(unittest.TestCase):
+class TestGameTick(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
@@ -590,14 +590,14 @@ class TestRPCheck(unittest.TestCase):
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
-    def test_rpcheck(self):
+    def test_gametick(self):
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         level = 25
         for p in op:
             p.online = True
             p.level = level
             level += 3
-        self.bot.rpcheck(0, 0)
+        self.bot.gametick(0, 0)
 
 if __name__ == "__main__":
     unittest.main()
