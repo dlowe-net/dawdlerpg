@@ -48,10 +48,6 @@ PENALTIES = {"quit": 20, "dropped": 10, "nick": 30, "message": 1, "part": 200, "
 PENDESC = {"quit": "quitting", "dropped": "dropped connection", "nick": "changing nicks", "message": "messaging", "part": "parting", "kick": "being kicked", "logout": "LOGOUT command"}
 
 
-# Output throttling - handle bursts of 5 messages every ten seconds
-THROTTLE_RATE = 5
-THROTTLE_PERIOD = 10
-
 parser = argparse.ArgumentParser(description="IdleRPG clone")
 parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
 parser.add_argument("config_file", help="Path to configuration file.  You must specify this.")
@@ -123,7 +119,10 @@ def read_config(path):
         "datadir": os.path.realpath(os.path.dirname(path)),
         "backupdir": ".dbbackup",
         "daemonize": True,
-        "loglevel": "DEBUG"
+        "loglevel": "DEBUG",
+        "throttle": True,
+        "throttle_rate": 4,
+        "throttle_period": 1
     }
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
@@ -799,7 +798,14 @@ class IRCClient:
     def send(self, s, loglevel=logging.DEBUG):
         """Send throttled messages."""
         b = bytes(s+"\r\n", encoding='utf8')
-        if self._messages_sent < THROTTLE_RATE:
+
+        if not conf["throttle"]:
+            log.log(loglevel, "-> %s", s)
+            self._writer.write(b)
+            self._bytes_sent += len(b)
+            return
+
+        if self._messages_sent < conf["throttle_rate"]:
             log.log(loglevel, "(%d)-> %s", self._messages_sent, s)
             self._writer.write(b)
             self._messages_sent += 1
@@ -819,24 +825,24 @@ class IRCClient:
         self._writer.write(b)
         self._messages_sent += 1
         self._bytes_sent += len(b)
-        if not self._flushq_task:
+        if conf["throttle"] and not self._flushq_task:
             self._flushq_task = asyncio.create_task(self.flushq_task())
 
 
     async def flushq_task(self):
         """Flush send queue and release throttle."""
         await asyncio.sleep(THROTTLE_PERIOD)
-        self._messages_sent = max(0, self._messages_sent - THROTTLE_RATE)
+        self._messages_sent = max(0, self._messages_sent - conf["throttle_rate"])
         while self._writeq:
-            while self._writeq and self._messages_sent < THROTTLE_RATE:
+            while self._writeq and self._messages_sent < conf["throttle_rate"]:
                 log.debug("(%d)~> %s", self._messages_sent, str(self._writeq[0], encoding='utf8').rstrip())
                 self._writer.write(self._writeq[0])
                 self._messages_sent += 1
                 self._bytes_sent += len(self._writeq[0])
                 self._writeq = self._writeq[1:]
             if self._writeq:
-                await asyncio.sleep(THROTTLE_PERIOD)
-                self._messages_sent = max(0, self._messages_sent - THROTTLE_RATE)
+                await asyncio.sleep(conf["throttle_period"])
+                self._messages_sent = max(0, self._messages_sent - conf["throttle_rate"])
 
         self._flushq_task = None
 
