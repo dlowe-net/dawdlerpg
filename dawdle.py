@@ -37,6 +37,8 @@ import time
 from hmac import compare_digest as compare_hash
 from operator import attrgetter
 
+logging.SPAMMY = 5
+logging.addLevelName("SPAMMY", 5)
 log = logging.getLogger()
 
 VERSION = "1.0.0"
@@ -115,7 +117,8 @@ def read_config(path):
         # Non-idlerpg config needs defaults
         "datadir": os.path.realpath(os.path.dirname(path)),
         "backupdir": ".dbbackup",
-        "daemonize": True
+        "daemonize": True,
+        "loglevel": "DEBUG"
     }
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
@@ -782,16 +785,17 @@ class IRCClient:
             except UnicodeDecodeError:
                 line = str(line, encoding='latin-1')
             line = line.rstrip('\r\n')
-            log.debug("<- %s", line)
+            loglevel = logging.SPAMMY if re.match(r"^PING ", line) else logging.DEBUG
+            log.log(loglevel, "<- %s", line)
             msg = self.parse_message(line)
             self.dispatch(msg)
 
 
-    def send(self, s):
+    def send(self, s, loglevel=logging.DEBUG):
         """Send throttled messages."""
         b = bytes(s+"\r\n", encoding='utf8')
         if self._messages_sent < THROTTLE_RATE:
-            log.debug("(%d)-> %s", self._messages_sent, s)
+            log.log(loglevel, "(%d)-> %s", self._messages_sent, s)
             self._writer.write(b)
             self._messages_sent += 1
             self._bytes_sent += len(b)
@@ -803,9 +807,9 @@ class IRCClient:
             self._flushq_task = asyncio.create_task(self.flushq_task())
 
 
-    def sendnow(self, s):
+    def sendnow(self, s, loglevel=logging.DEBUG):
         """Send messages ignoring throttle."""
-        log.debug("=> %s", s)
+        log.log(loglevel, "=> %s", s)
         b = bytes(s+"\r\n", encoding='utf8')
         self._writer.write(b)
         self._messages_sent += 1
@@ -872,7 +876,7 @@ class IRCClient:
 
     def handle_ping(self, msg):
         """PING - sends PONG back to server for keepalive."""
-        self.sendnow(f"PONG :{msg.trailing}")
+        self.sendnow(f"PONG :{msg.trailing}", loglevel=logging.SPAMMY)
 
 
     def handle_005(self, msg):
@@ -2580,10 +2584,11 @@ def start_bot():
     log.setLevel(logging.INFO)
     if "logfile" in conf:
         h = logging.FileHandler(conf["logfile"])
+        h.setLevel(conf["loglevel"])
         h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
         log.addHandler(h)
 
-    # debug mode turns off daemonization and cranks the log level to max.
+    # debug mode turns off daemonization and sets the log level to debug.
     if conf["debug"]:
         conf["daemonize"] = False
         log.setLevel(logging.DEBUG)
