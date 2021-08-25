@@ -16,6 +16,9 @@ DawdleRPG is capable of being a drop-in replacement.
 
 - Run `dawdle.py <path to old irpg.conf>`
 
+If you have any command line overrides to the configuration, you will
+need to replace them with the `-o key=value` option.
+
 ## Differences from IdleRPG
 
 - Quest pathfinding is much more efficient.

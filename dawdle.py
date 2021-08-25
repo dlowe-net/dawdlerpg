@@ -50,59 +50,9 @@ PENDESC = {"quit": "quitting", "dropped": "dropped connection", "nick": "changin
 THROTTLE_RATE = 5
 THROTTLE_PERIOD = 10
 
-# command line overrides .irpg.conf
 parser = argparse.ArgumentParser(description="IdleRPG clone")
-parser.add_argument("-v", "--verbose")
-parser.add_argument("--conf", default="dawdle.conf")
-parser.add_argument("--debug")
-parser.add_argument("--debugfile")
-parser.add_argument("-s", "--server", action="append")
-parser.add_argument("-n", "--botnick")
-parser.add_argument("-u", "--botuser")
-parser.add_argument("-r", "--botrlnm")
-parser.add_argument("-c", "--botchan")
-parser.add_argument("-p", "--botident")
-parser.add_argument("-m", "--botmodes")
-parser.add_argument("-o", "--botopcmd")
-parser.add_argument("--localaddr")
-parser.add_argument("-g", "--botghostcmd")
-parser.add_argument("--helpurl")
-parser.add_argument("--admincommurl")
-parser.add_argument("--doban")
-parser.add_argument("--silentmode", type=int)
-parser.add_argument("--writequestfile")
-parser.add_argument("--questfilename")
-parser.add_argument("--voiceonlogin")
-parser.add_argument("--noccodes")
-parser.add_argument("--nononp")
-parser.add_argument("--mapurl")
-parser.add_argument("--statuscmd")
-parser.add_argument("--pidfile")
-parser.add_argument("--reconnect")
-parser.add_argument("--reconnect_wait", type=int)
-parser.add_argument("--self_clock", type=int)
-parser.add_argument("--modsfile")
-parser.add_argument("--casematters")
-parser.add_argument("--detectsplits")
-parser.add_argument("--splitwait", type=int)
-parser.add_argument("--allowuserinfo")
-parser.add_argument("--noscale")
-parser.add_argument("--owner")
-parser.add_argument("--owneraddonly")
-parser.add_argument("--ownerdelonly")
-parser.add_argument("--ownerpevalonly")
-parser.add_argument("--senduserlist")
-parser.add_argument("--limitpen", type=int)
-parser.add_argument("--mapx", type=int)
-parser.add_argument("--mapy", type=int)
-parser.add_argument("--modesperline", type=int)
-parser.add_argument("-k", "--okurl", action="append")
-parser.add_argument("--eventsfile")
-parser.add_argument("--rpstep", type=float)
-parser.add_argument("--rpbase", type=int)
-parser.add_argument("--rppenstep", type=float)
-parser.add_argument("-d", "--dbfile", "--irpgdb", "--db")
-parser.add_argument("config_file")
+parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
+parser.add_argument("config_file", help="Path to configuration file.  You must specify this.")
 
 
 args = None
@@ -2613,13 +2563,24 @@ def start_bot():
     conf = read_config(args.config_file)
 
     # override configurations from command line
-    for k,v in vars(args).items():
-        if v is not None and k in conf:
+    server_overrides = []
+    okurl_overrides = []
+    for pair in args.override:
+        if "=" not in pair:
+            sys.stderr.write("Overrides must be in k=v format.\n")
+            sys.exit(1)
+        k,v = pair.split('=', 1)
+        if k == "server":
+            server_overrides.append(v)
+        elif k == "okurl":
+            okurl_overrides.append(v)
+        else:
             conf[k] = parse_val(v)
-    if args.server:
-        conf["servers"] = args.server
-    if args.okurl:
-        conf["okurls"] = args.okurl
+    if server_overrides:
+        conf["servers"] = server_overrides
+    if okurl_overrides:
+        conf["okurls"] = okurl_overrides
+
 
     global db
     db = PlayerDB(IdleRPGPlayerStore(datapath(conf["dbfile"])))
