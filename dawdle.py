@@ -115,6 +115,7 @@ def read_config(path):
         # Non-idlerpg config needs defaults
         "datadir": os.path.realpath(os.path.dirname(path)),
         "backupdir": ".dbbackup",
+        "daemonize": True
     }
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
     config_line_re = re.compile(r"^\s*(\S+)\s*(.*)$")
@@ -335,7 +336,7 @@ class IdleRPGPlayerStore(PlayerStore):
         """Converts an IdleRPG item code to a tuple of (level, name)."""
         match = re.match(r"(\d+)(.?)", s)
         if not match:
-            print(f"wtf not matched: {s}")
+            log.error(f"invalid item code: {s}")
         lvl = int(match[1])
         if match[2]:
             return (lvl, [k for k,v in IdleRPGPlayerStore.ITEMCODES.items() if v == match[2]][0])
@@ -378,7 +379,7 @@ class IdleRPGPlayerStore(PlayerStore):
                     continue
                 parts = line.rstrip().split("\t")
                 if len(parts) != 32:
-                    print(f"omg line corrupt {len(parts)} fields:", repr(line))
+                    log.critical("line corrupt in player db - %d fields: %s", len(parts), repr(line))
                     sys.exit(-1)
 
                 d = dict(zip(["name", "pw", "isadmin", "level", "cclass", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"], parts))
@@ -781,8 +782,7 @@ class IRCClient:
             except UnicodeDecodeError:
                 line = str(line, encoding='latin-1')
             line = line.rstrip('\r\n')
-            if conf["debug"]:
-                print(int(time.time()), "<-", line)
+            log.debug("<- %s", line)
             msg = self.parse_message(line)
             self.dispatch(msg)
 
@@ -791,8 +791,7 @@ class IRCClient:
         """Send throttled messages."""
         b = bytes(s+"\r\n", encoding='utf8')
         if self._messages_sent < THROTTLE_RATE:
-            if conf["debug"]:
-                print(int(time.time()), f"({self._messages_sent})->", s)
+            log.debug("(%d)-> %s", self._messages_sent, s)
             self._writer.write(b)
             self._messages_sent += 1
             self._bytes_sent += len(b)
@@ -806,8 +805,7 @@ class IRCClient:
 
     def sendnow(self, s):
         """Send messages ignoring throttle."""
-        if conf["debug"]:
-            print(int(time.time()), "=>", s)
+        log.debug("=> %s", s)
         b = bytes(s+"\r\n", encoding='utf8')
         self._writer.write(b)
         self._messages_sent += 1
@@ -822,8 +820,7 @@ class IRCClient:
         self._messages_sent = max(0, self._messages_sent - THROTTLE_RATE)
         while self._writeq:
             while self._writeq and self._messages_sent < THROTTLE_RATE:
-                if conf["debug"]:
-                    print(int(time.time()), f"({self._messages_sent})~>", str(self._writeq[0], encoding='utf8'))
+                log.debug("(%d)~> %s", self._messages_sent, str(self._writeq[0], encoding='utf8'))
                 self._writer.write(self._writeq[0])
                 self._messages_sent += 1
                 self._bytes_sent += len(self._writeq[0])
@@ -1094,7 +1091,6 @@ class IRCClient:
         for host in re.findall(r"https?://([^/]+)/", msg.trailing):
             if host not in conf["okurls"]:
                 # User not okay
-                print(f"Found host {host} not in {repr(conf['okurls'])}")
                 self.kickban(msg.src)
                 return False
         return True
@@ -1316,7 +1312,7 @@ class DawdleBot(object):
                 self.acquired_ops()
         else:
             self.chanmsg("0 users qualified for auto login.")
-        self._rpcheck_task = asyncio.create_task(self.rpcheck_loop())
+        self._gametick_task = asyncio.create_task(self.gametick_loop())
         self._qtimer = time.time() + self.randint('qtimer_init', 12, 24)*3600
 
 
@@ -1345,9 +1341,9 @@ class DawdleBot(object):
         """Called when the bot has been disconnected."""
         self._irc = None
         self._state = 'disconnected'
-        if self._rpcheck_task:
-            self._rpcheck_task.cancel()
-            self._rpcheck_task = None
+        if self._gametick_task:
+            self._gametick_task.cancel()
+            self._gametick_task = None
 
 
     def private_message(self, src, text):
@@ -1963,26 +1959,26 @@ class DawdleBot(object):
         expiration = time.time() - conf['splitwait']
         for p in self._players.online():
             if p.nick not in self._irc._users and p.lastlogin < expiration:
-                print(f"Expiring {p.nick} who was logged in as {p.nick} but was lost in a netsplit.")
+                log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
                 self.penalize(player, "dropped")
                 p.online = False
         self._players.write()
 
-    async def rpcheck_loop(self):
+    async def gametick_loop(self):
         """Main gameplay loop to manage timing."""
         try:
             last_time = time.time() - 1
             while self._state == 'ready':
                 await asyncio.sleep(conf['self_clock'])
                 now = time.time()
-                self.rpcheck(int(now), int(now - last_time))
+                self.gametick(int(now), int(now - last_time))
                 last_time = now
         except Exception as err:
-            print(err)
+            log.exception(err)
             sys.exit(2)
 
 
-    def rpcheck(self, now, passed):
+    def gametick(self, now, passed):
         """Main gameplay routine."""
         if conf['detectsplits']:
             self.expire_splits()
@@ -2581,6 +2577,19 @@ def start_bot():
     if okurl_overrides:
         conf["okurls"] = okurl_overrides
 
+    log.setLevel(logging.INFO)
+    if "logfile" in conf:
+        h = logging.FileHandler(conf["logfile"])
+        h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        log.addHandler(h)
+
+    # debug mode turns off daemonization and cranks the log level to max.
+    if conf["debug"]:
+        conf["daemonize"] = False
+        log.setLevel(logging.DEBUG)
+        h = logging.StreamHandler()
+        h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        log.addHandler(h)
 
     global db
     db = PlayerDB(IdleRPGPlayerStore(datapath(conf["dbfile"])))
@@ -2593,7 +2602,7 @@ def start_bot():
     if 'pidfile' in conf:
         check_pidfile(datapath(conf['pidfile']))
 
-    if not conf['debug']:
+    if conf['daemonize']:
         daemonize()
 
     if 'pidfile' in conf:
