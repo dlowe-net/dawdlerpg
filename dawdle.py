@@ -1881,7 +1881,7 @@ class DawdleBot(object):
             if self._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
-            qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
+            qp = [p for p in self._players.online() if p.level > 24]
             if len(qp) < 4:
                 self.notice(nick, "There's not enough eligible players.")
                 return
