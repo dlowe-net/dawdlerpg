@@ -2076,7 +2076,7 @@ class DawdleBot(object):
             if top:
                 self.chanmsg("Idle RPG Top Players:")
                 for i, p in zip(itertools.count(), top):
-                    self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i}! "
+                    self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i+1}! "
                                  f"Next level in {duration(p.nextlvl)}.")
             self._players.backup_store()
         # high level players fight each other randomly
