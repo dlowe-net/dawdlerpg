@@ -1886,7 +1886,7 @@ class DawdleBot(object):
                 self.notice(nick, "There's not enough eligible players.")
                 return
             self.notice(nick, "Starting quest.")
-            self.quest_start(int(time.time))
+            self.quest_start(int(time.time()))
 
 
     def cmd_quest(self, player, nick, args):
