@@ -1015,9 +1015,9 @@ class IRCClient:
 
     def handle_nick(self, msg):
         """NICK - bot or user had its nick changed."""
-        self._users[new_nick] = self._users[old_nick]
-        self._users[new_nick].nick = new_nick
-        del self._users[old_nick]
+        self._users[msg.args[0]] = self._users[msg.src]
+        self._users[msg.args[0]].nick = msg.args[0]
+        del self._users[msg.src]
 
         if msg.src == self._nick:
             # Update my nick
