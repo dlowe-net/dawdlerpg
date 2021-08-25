@@ -1,7 +1,7 @@
 # Calamities - these add to a player's time to level
 C was struck by lightning
-C mauled by a bear
-C cursed by a swamp witch
+C was mauled by a bear
+C was cursed by a swamp witch
 C fell into a bog
 C DIED... a bit
 
