@@ -1929,7 +1929,7 @@ class DawdleBot(object):
             self.godsend()
         elif args == 'hog':
             self.chanmsg(f"{nick} has summoned the Hand of God.")
-            self.hand_of_god()
+            self.hand_of_god(self._players.online())
         elif args == 'teambattle':
             self.team_battle(self._players.online())
         elif args == 'evilness':
