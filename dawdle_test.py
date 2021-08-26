@@ -444,6 +444,10 @@ class TestQuest(unittest.TestCase):
         dawdle.conf['eventsfile'] = "events.txt"
         dawdle.conf['writequestfile'] = True
         dawdle.conf['questfilename'] = "/tmp/testquestfile.txt"
+        dawdle.conf['quest_interval_min'] = 6*3600
+        dawdle.conf['quest_min_level'] = 24
+        dawdle.conf['penquest'] = 15
+        dawdle.conf['penlogout'] = 20
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -583,6 +587,7 @@ class TestGameTick(unittest.TestCase):
         dawdle.conf['eventsfile'] = "events.txt"
         dawdle.conf['writequestfile'] = True
         dawdle.conf['questfilename'] = "/tmp/testquestfile.txt"
+        dawdle.conf['quest_min_level'] = 24
         dawdle.conf['self_clock'] = 1
         dawdle.conf['mapx'] = 500
         dawdle.conf['mapy'] = 500

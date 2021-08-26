@@ -118,13 +118,22 @@ def read_config(path):
         "throttle": True,
         "throttle_rate": 4,
         "throttle_period": 1,
+        "penquest": 15,
         "pennick": 30,
         "penmessage": 1,
         "penpart": 200,
         "penkick": 250,
         "penquit": 20,
         "pendropped": 20,
-        "penlogout": 20
+        "penlogout": 20,
+        "good_battle_pct": 110,
+        "evil_battle_pct": 90,
+        "max_name_len": 16,
+        "max_class_len": 30,
+        "message_wrap_len": 400,
+        "quest_interval_min": 12,
+        "quest_interval_max": 24,
+        "quest_min_level": 24,
     }
 
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
@@ -284,13 +293,13 @@ class Player(object):
         """
         Add up item power for battle.
 
-        Good players get a 10% boost, and evil players get a 10% penalty.
+        Good players get a boost, and evil players get a penalty.
         """
         sum = self.itemsum()
         if self.alignment == 'e':
-            return int(sum * 0.9)
+            return int(sum * conf["evil_battle_pct"]/100)
         if self.alignment == 'g':
-            return int(sum * 1.1)
+            return int(sum * conf["good_battle_pct"]/100)
         return sum
 
 
@@ -329,6 +338,7 @@ class IdleRPGPlayerStore(PlayerStore):
     """Implements a PlayerStore compatible with the IdleRPG db."""
 
     IRPG_FIELDS = ["username", "pass", "is admin", "level", "class", "next ttl", "nick", "userhost", "online", "idled", "x pos", "y pos", "pen_mesg", "pen_nick", "pen_part", "pen_kick", "pen_quit", "pen_quest", "pen_logout", "created", "last login", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
+    IRPG_FIELD_COUNT = len(IRPG_FIELDS)
 
     # Instead of names, idlerpg decided to tack on codes to the number.
     ITEMCODES = {
@@ -388,10 +398,11 @@ class IdleRPGPlayerStore(PlayerStore):
                 if re.match(r'\s*(?:#|$)', line):
                     continue
                 parts = line.rstrip().split("\t")
-                if len(parts) != 32:
+                if len(parts) != IdleRPGPlayerStore.IRPG_FIELD_COUNT:
                     log.critical("line corrupt in player db - %d fields: %s", len(parts), repr(line))
                     sys.exit(-1)
 
+                # This makes a mapping from irpg field to player field.
                 d = dict(zip(["name", "pw", "isadmin", "level", "cclass", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"], parts))
                 # convert items
                 for i in Player.ITEMS:
@@ -628,8 +639,6 @@ class PlayerDB(object):
         if pname in self._players:
             raise KeyError
 
-        pclass = pclass[:30]
-
         p = Player.new_player(pname, pclass, ppass, conf['rpbase'])
         self._players[pname] = p
         self._store.new(p)
@@ -703,7 +712,7 @@ def first_setup():
     if pname == "":
         pname = conf["owner"]
     pclass = input("Enter a character class for this account: ")
-    pclass = pclass[:30]
+    pclass = pclass[:conf["max_class_len"]]
     try:
         old = termios.tcgetattr(sys.stdin.fileno())
         new = old.copy()
@@ -1102,7 +1111,7 @@ class IRCClient:
         if msg.src not in self._users:
             # Not in channel - maybe channel could use mode +n
             return False
-        if msg.time > self._users[msg.src].joined + 90:
+        if msg.time > self._users[msg.src].joined + conf["bannable_time"]:
             # Been in channel for a while, prob ok?
             return True
 
@@ -1142,7 +1151,7 @@ class IRCClient:
 
     def notice(self, target, text):
         """Send notice text to target."""
-        for line in textwrap.wrap(text, width=400):
+        for line in textwrap.wrap(text, width=conf["message_wrap_len"]):
             self.send(f"NOTICE {target} :{line}")
 
 
@@ -1164,7 +1173,7 @@ class IRCClient:
 
     def chanmsg(self, text):
         """Send message text to bot channel."""
-        for line in textwrap.wrap(text, width=400):
+        for line in textwrap.wrap(text, width=conf["message_wrap_len"]):
             self.send(f"PRIVMSG {conf['botchan']} :{line}")
 
 
@@ -1331,7 +1340,9 @@ class DawdleBot(object):
         else:
             self.chanmsg("0 users qualified for auto login.")
         self._gametick_task = asyncio.create_task(self.gametick_loop())
-        self._qtimer = time.time() + self.randint('qtimer_init', 12, 24)*3600
+        self._qtimer = time.time() + self.randint('qtimer_init',
+                                                  conf["quest_interval_min"],
+                                                  conf["quest_interval_max"])
 
 
     def acquired_ops(self):
@@ -1619,13 +1630,13 @@ class DawdleBot(object):
             self.notice(nick, "Sorry, that character name is already in use.")
         elif pname == self._irc._nick or pname == conf['botnick']:
             self.notice(nick, "That character name cannot be registered.")
-        elif len(pname) > 16:
-            self.notice(nick, "Sorry, character names must be between 1 and 16 characters long.")
-        elif len(pclass) > 30:
-            self.notice(nick, "Sorry, character classes must be between 1 and 30 characters long.")
+        elif len(parts[1]) < 1 or len(pname) > conf["max_name_len"]:
+            self.notice(nick, f"Sorry, character names must be between 1 and {conf['max_name_len']} characters long.")
+        elif len(parts[1]) < 1 or len(pclass) > conf["max_class_len"]:
+            self.notice(nick, f"Sorry, character classes must be between 1 and {conf['max_class_len']} characters long.")
         elif pname[0] == "#":
             self.notice(nick, "Sorry, character names may not start with #.")
-        elif not pname.ispprintable():
+        elif not pname.isprintable():
             self.notice(nick, "Sorry, character names may not include control codes.")
         elif not pclass.isprintable():
             self.notice(nick, "Sorry, character classes may not include control codes.")
@@ -1643,14 +1654,14 @@ class DawdleBot(object):
 
 
     def cmd_removeme(self, player, nick, args):
-        """delete own character."""
+        """Delete own character."""
         if args == "":
             self.notice(nick, "Try: REMOVEME <password>")
         elif not self._players.check_login(player.name, args):
             self.notice(nick, "Wrong password.")
         else:
             self.notice(nick, f"Account {player.name} removed.")
-            self.chanmsg(f"{nick} removed their account, {player.name}, the {player.cclass}.")
+            self.chanmsg(f"{nick} removed their account. {player.name}, the level {player.level} {player.cclass} is no more.")
             self._players.delete_player(player.name)
             if conf['voiceonlogin'] and self._irc.bot_has_ops():
                 self._irc.revoke_voice(nick)
@@ -1693,6 +1704,10 @@ class DawdleBot(object):
             self.notice(nick, "Try: CHCLASS <account> <new class>")
         elif parts[0] not in self._players:
             self.notice(nick, f"{parts[0]} is not a valid account.")
+        elif len(parts[1]) < 1 or len(parts[1]) > conf["max_class_len"]:
+            self.notice(nick, f"Character classes must be between 1 and {conf['max_class_len']} characters long.")
+        elif not parts[1].isprintable():
+            self.notice(nick, "Character classes may not include control codes.")
         else:
             self._players[parts[0]].cclass = parts[1]
             self.notice(nick, f"{parts[0]}'s character class is now '{parts[1]}'.")
@@ -1717,6 +1732,14 @@ class DawdleBot(object):
             self.notice(nick, "Try: CHPASS <account> <new account name>")
         elif parts[0] not in self._players:
             self.notice(nick, f"{parts[0]} is not a valid account.")
+        elif parts[1] in self._players:
+            self.notice(nick, f"{parts[1]} is already taken.")
+        elif len(parts[1]) < 1 or len(parts[1]) > conf["max_name_len"]:
+            self.notice(nick, f"Character names must be between 1 and {conf['max_name_len']} characters long.")
+        elif parts[1][0] == "#":
+            self.notice(nick, "Character names may not start with a #.")
+        elif not parts[1].isprintable():
+            self.notice(nick, "Character names may not include control codes.")
         else:
             self._players.rename_player(parts[0], parts[1])
             self.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
@@ -1898,7 +1921,7 @@ class DawdleBot(object):
             if self._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
-            qp = [p for p in self._players.online() if p.level > 24]
+            qp = [p for p in self._players.online() if p.level > conf["quest_min_level"]]
             if len(qp) < 4:
                 self.notice(nick, "There's not enough eligible players.")
                 return
@@ -1935,18 +1958,18 @@ class DawdleBot(object):
             return
 
         if self._quest and player in self._quest.questors:
-            self.logchanmsg(player.name + "'s insolence has brought the wrath of "
-                            "the gods down upon them.  Your great wickedness "
-                            "burdens you like lead, drawing you downwards with "
-                            "great force towards hell. Thereby have you plunged "
-                            "15 steps closer to that gaping maw.")
+            self.logchanmsg(f"{player.name}'s insolence has brought the wrath of "
+                            f"the gods down upon them.  Your great wickedness "
+                            f"burdens you like lead, drawing you downwards with "
+                            f"great force towards hell. Thereby have you plunged "
+                            f"{conf['penquest']} steps closer to that gaping maw.")
             for p in self._players.online():
-                gain = int(15 * (conf['rppenstep'] ** p.level))
+                gain = int(conf["penquest"] * (conf['rppenstep'] ** p.level))
                 p.penquest += gain
                 p.nextlvl += gain
 
             self._quest = None
-            self._qtimer = time.time() + 12 * 3600
+            self._qtimer = time.time() + conf["quest_interval_min"]
 
         if text:
             penalty *= len(text)
@@ -2424,7 +2447,7 @@ class DawdleBot(object):
     def quest_start(self, now):
         """Start a random quest with four random players."""
         latest_login_time = now - 36000
-        qp = [p for p in self._players.online() if p.level > 24 and p.lastlogin < latest_login_time]
+        qp = [p for p in self._players.online() if p.level > conf["quest_min_level"] and p.lastlogin < latest_login_time]
         if len(qp) < 4:
             return
         qp = self.randsample('quest_members', qp, 4)
@@ -2470,7 +2493,7 @@ class DawdleBot(object):
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
                 self._quest = None
-                self._qtimer = now + 6*3600
+                self._qtimer = now + conf["quest_interval_min"]
                 self.write_quest_file()
         elif self._quest.mode == 2:
             destx = self._quest.dests[self._quest.stage-1][0]
@@ -2496,7 +2519,7 @@ class DawdleBot(object):
                     for q in qp:
                         q.nextlvl = int(q.nextlvl * 0.75)
                     self._quest = None
-                    self._qtimer = now + 6*3600
+                    self._qtimer = now + conf["quest_interval_min"]
                 self.write_quest_file()
 
 
