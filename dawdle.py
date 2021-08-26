@@ -131,8 +131,8 @@ def read_config(path):
         "max_name_len": 16,
         "max_class_len": 30,
         "message_wrap_len": 400,
-        "quest_interval_min": 12,
-        "quest_interval_max": 24,
+        "quest_interval_min": 12*3600,
+        "quest_interval_max": 24*3600,
         "quest_min_level": 24,
     }
 
