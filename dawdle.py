@@ -1745,6 +1745,27 @@ class DawdleBot(object):
             self.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
 
 
+    def cmd_config(self, player, nick, args):
+        """View/set a configuration setting."""
+        if args == "":
+            self.notice(nick, "Try: CONFIG <key search> or CONFIG <key> <value>")
+            return
+        
+        parts = args.split(' ', 2)
+        if len(parts) == 1:
+            if parts[0] in conf:
+                self.notice(nick, f"{parts[0]} {conf[parts[0]]}")
+            else:
+                self.notice(nick, f"Matching config keys: {', '.join([k for k in conf if parts[0] in k])}")
+            return
+        if parts[0] not in conf:
+            self.notice(nick, f"{parts[0]} is not a config key.")
+            return
+        val = parse_val(parts[1])
+        conf[parts[0]] = val
+        self.notice(nick, f"{parts[0]} set to {val}.")
+
+
     def cmd_clearq(self, player, nick, args):
         """Clear outgoing message queue."""
         self._irc._writeq = []
