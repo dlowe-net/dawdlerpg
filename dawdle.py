@@ -2021,7 +2021,7 @@ class DawdleBot(object):
             return
 
         if self._quest and player in self._quest.questors:
-            self.logchanmsg(f"{C('name', player.name)}'s insolence has brought the wrath of "
+            self.logchanmsg(f"{C('name')}{player.name}'s{C()} insolence has brought the wrath of "
                             f"the gods down upon them.  Your great wickedness "
                             f"burdens you like lead, drawing you downwards with "
                             f"great force towards hell. Thereby have you plunged "
@@ -2253,7 +2253,7 @@ class DawdleBot(object):
             amount = int((gain / 100)*player.nextlvl)
             self.logchanmsg(f"{C('name', player.name)} [{playerroll}/{playersum}] has {flavor_start} "
                             f"{C('name', oppname)} [{opproll}/{oppsum}] {flavor_win}! "
-                            f"{duration(amount)} is removed from {C('name', player.name)}'s clock.")
+                            f"{duration(amount)} is removed from {C('name')}{player.name}'s{C()} clock.")
             player.nextlvl -= amount
             if player.nextlvl > 0:
                 self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
@@ -2279,7 +2279,7 @@ class DawdleBot(object):
             amount = int((loss / 100)*player.nextlvl)
             self.logchanmsg(f"{C('name', player.name)} [{playerroll}/{playersum}] has {flavor_start} "
                             f"{oppname} [{opproll}/{oppsum}] {flavor_loss}! {duration(amount)} is "
-                            f"added to {C('name', player.name)}'s clock.")
+                            f"added to {C('name')}{player.name}'s{C()} clock.")
             player.nextlvl += amount
             self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
@@ -2331,26 +2331,26 @@ class DawdleBot(object):
             # Item damaging calamity
             item = self.randchoice('calamity_item', Player.ITEMS)
             if item == "ring":
-                msg = f"{C('name', player.name)} accidentally smashed their ring with a hammer!"
+                msg = f"{C('name', player.name)} accidentally smashed their {C('item', 'ring')} with a hammer!"
             elif item == "amulet":
-                msg = f"{C('name', player.name)} fell, chipping the stone in their amulet!"
+                msg = f"{C('name', player.name)} fell, chipping the stone in their {C('item', 'amulet')}!"
             elif item == "charm":
-                msg = f"{C('name', player.name)} slipped and dropped their charm in a dirty bog!"
+                msg = f"{C('name', player.name)} slipped and dropped their {C('item', 'charm')} in a dirty bog!"
             elif item == "weapon":
-                msg = f"{C('name', player.name)} left their weapon out in the rain to rust!"
+                msg = f"{C('name', player.name)} left their {C('item', 'weapon')} out in the rain to rust!"
             elif item == "helm":
-                msg = f"{C('name', player.name)}'s helm was touched by a rust monster!"
+                msg = f"{C('name')}{player.name}'s{C()} {C('item', 'helm')} was touched by a rust monster!"
             elif item == "tunic":
-                msg = f"{C('name', player.name)} spilled a level 7 shrinking potion on their tunic!"
+                msg = f"{C('name', player.name)} spilled a level 7 shrinking potion on their {C('item', 'tunic')}!"
             elif item == "gloves":
                 msg = f"{C('name', player.name)} dipped their gloved fingers in a pool of acid!"
             elif item == "leggings":
-                msg = f"{C('name', player.name)} burned a hole through their leggings while ironing them!"
+                msg = f"{C('name', player.name)} burned a hole through their {C('item', 'leggings')} while ironing them!"
             elif item == "shield":
-                msg = f"{C('name', player.name)}'s shield was damaged by a dragon's fiery breath!"
+                msg = f"{C('name')}{player.name}'s{C()} {C('item', 'shield')} was damaged by a dragon's fiery breath!"
             elif item == "boots":
                 msg = f"{C('name', player.name)} stepped in some hot lava!"
-            self.logchanmsg(msg + f" {C('name', player.name)}'s {C('item', Player.ITEMDESC[item])} loses 10% of its effectiveness.")
+            self.logchanmsg(msg + f" {C('name')}{player.name}'s{C()} {C('item', Player.ITEMDESC[item])} loses 10% of its effectiveness.")
             setattr(player, item, int(getattr(player, item) * 0.9))
             return
 
@@ -2374,27 +2374,27 @@ class DawdleBot(object):
             # Item improving godsend
             item = self.randchoice('godsend_item', Player.ITEMS)
             if item == "ring":
-                msg = f"{C('name', player.name)} dipped their ring into a sacred fountain!"
+                msg = f"{C('name', player.name)} dipped their {C('item', 'ring')} into a sacred fountain!"
             elif item == "amulet":
-                msg = f"{C('name', player.name)}'s amulet was blessed by a passing cleric!"
+                msg = f"{C('name')}{player.name}'s{C()} {C('item', 'amulet')} was blessed by a passing cleric!"
             elif item == "charm":
-                msg = f"{C('name', player.name)}'s charm ate a bolt of lightning!"
+                msg = f"{C('name')}{player.name}'s{C()} {C('item', 'charm')} ate a bolt of lightning!"
             elif item == "weapon":
-                msg = f"{C('name', player.name)} sharpened the edge of their weapon!"
+                msg = f"{C('name', player.name)} sharpened the edge of their {C('item', 'weapon')}!"
             elif item == "helm":
-                msg = f"{C('name', player.name)} polished their helm to a mirror shine."
+                msg = f"{C('name', player.name)} polished their {C('item', 'helm')} to a mirror shine."
             elif item == "tunic":
-                msg = f"A magician cast a spell of Rigidity on {C('name', player.name)}'s tunic!"
+                msg = f"A magician cast a spell of Rigidity on {C('name')}{player.name}'s{C()} {C('item', 'tunic')}!"
             elif item == "gloves":
-                msg = f"{C('name', player.name)} lined their gloves with a magical cloth!"
+                msg = f"{C('name', player.name)} lined their {C('item', 'gloves')} with a magical cloth!"
             elif item == "leggings":
-                msg = f"The local wizard imbued {C('name', player.name)}'s pants with a Spirit of Fortitude!"
+                msg = f"The local wizard imbued {C('name')}{player.name}'s{C()} {C('item', 'pants')} with a Spirit of Fortitude!"
             elif item == "shield":
-                msg = f"{C('name', player.name)} reinforced their shield with a dragon's scale!"
+                msg = f"{C('name', player.name)} reinforced their {C('item', 'shield')} with a dragon's scale!"
             elif item == "boots":
-                msg = f"A sorceror enchanted {C('name', player.name)}'s boots with Swiftness!"
+                msg = f"A sorceror enchanted {C('name')}{player.name}'s{C()} {C('item', 'boots')} with Swiftness!"
 
-            self.logchanmsg(msg + f" {C('name', player.name)}'s {C('item', Player.ITEMDESC[item])} gains 10% effectiveness.")
+            self.logchanmsg(msg + f" {C('name')}{player.name}'s{C()} {C('item', Player.ITEMDESC[item])} gains 10% effectiveness.")
             setattr(player, item, int(getattr(player, item) * 1.1))
             return
 
