@@ -1682,8 +1682,8 @@ class DawdleBot(object):
             player.userhost = self._irc._users[nick].userhost
             if conf['voiceonlogin'] and self._irc.bot_has_ops():
                 self._irc.grant_voice(nick)
-            self.chanmsg(f"Welcome {nick}'s new player {pname}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
-            self.notice(nick, f"Success! Account {pname} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
+            self.chanmsg(f"Welcome {nick}'s new player {C('name', pname)}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
+            self.notice(nick, f"Success! Account {C('name', pname)} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
             self.notice(nick, "NOTE: The point of the game is to see who can idle the longest. As such, talking in the channel, parting, quitting, and changing nicks all penalize you.")
             self._new_accounts += 1
 
@@ -1924,7 +1924,7 @@ class DawdleBot(object):
 
     def cmd_hog(self, player, nick, args):
         """Trigger Hand of God."""
-        self.chanmsg(f"{nick} has summoned the Hand of God.")
+        self.chanmsg(f"{C('name', player.name)} has summoned the Hand of God.")
         self.hand_of_god(self._players.online())
 
 
@@ -1937,23 +1937,23 @@ class DawdleBot(object):
         if parts[0] not in self._players:
             self.notice(nick, f"No such username {parts[0]}.")
             return
-        player = self._players[parts[0]]
+        target = self._players[parts[0]]
         amount = int(parts[1])
         if amount == 0:
             self.notice(nick, "That would not be interesting.")
             return
 
-        if amount > player.nextlvl:
+        if amount > target.nextlvl:
             self.notice(nick,
-                        f"Time to level for {C('name', player.name)} ({player.nextlvl}s) "
+                        f"Time to level for {C('name', target.name)} ({target.nextlvl}s) "
                         f"is lower than {amount}; setting TTL to 0.")
-            amount = player.nextlvl
-        player.nextlvl -= amount
+            amount = target.nextlvl
+        target.nextlvl -= amount
         direction = 'towards' if amount > 0 else 'away from'
-        self.notice(nick, f"{C('name', player.name)} now reaches level {player.level + 1} in {duration(player.nextlvl)}.")
-        self.logchanmsg(f"{nick} has pushed {C('name', player.name)} {abs(amount)} seconds {direction} "
-                        f"level {player.level + 1}.  {C('name', player.name)} reaches next level "
-                        f"in {duration(player.nextlvl)}.")
+        self.notice(nick, f"{C('name', target.name)} now reaches level {target.level + 1} in {duration(target.nextlvl)}.")
+        self.logchanmsg(f"{C('name', player.name} has pushed {C('name', target.name)} {abs(amount)} seconds {direction} "
+                        f"level {target.level + 1}.  {C('name', target.name)} reaches next level "
+                        f"in {duration(target.nextlvl)}.")
 
 
     def cmd_trigger(self, player, nick, args):
@@ -1963,7 +1963,7 @@ class DawdleBot(object):
         elif args == 'godsend':
             self.godsend()
         elif args == 'hog':
-            self.chanmsg(f"{nick} has summoned the Hand of God.")
+            self.chanmsg(f"{C('name', player.name)} has summoned the Hand of God.")
             self.hand_of_god(self._players.online())
         elif args == 'teambattle':
             self.team_battle(self._players.online())
