@@ -166,7 +166,7 @@ def read_config(path):
         "color": False,
         "namecolor": "cyan",
         "durationcolor": "green",
-        "itemcolor": "yellow",
+        "itemcolor": "olive",
     }
 
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
