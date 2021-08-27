@@ -1552,7 +1552,7 @@ class DawdleBot(object):
 
         online_count = len(self._players.online())
         q_bytes = sum([len(b) for b in self._irc._writeq])
-        online_admins = [CC("name", p.name) for p in self._players.online() if p.isadmin]
+        online_admins = [C("name", p.name) for p in self._players.online() if p.isadmin]
         if self._silence:
             silent_mode = ','.join(self._silence)
         else:
