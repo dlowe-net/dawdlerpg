@@ -1959,28 +1959,28 @@ class DawdleBot(object):
     def cmd_trigger(self, player, nick, args):
         """Trigger in-game events"""
         if args == 'calamity':
-            self.chanmsg("{C('name', player.name)} brings down ruin upon the land.")
+            self.chanmsg(f"{C('name', player.name)} brings down ruin upon the land.")
             self.calamity()
         elif args == 'godsend':
-            self.chanmsg("{C('name', player.name)} rains blessings upon the people.")
+            self.chanmsg(f"{C('name', player.name)} rains blessings upon the people.")
             self.godsend()
         elif args == 'hog':
             self.chanmsg(f"{C('name', player.name)} has summoned the Hand of God.")
             self.hand_of_god(self._players.online())
         elif args == 'teambattle':
-            self.chanmsg("{C('name', player.name)} has decreed violence.")
+            self.chanmsg(f"{C('name', player.name)} has decreed violence.")
             self.team_battle(self._players.online())
         elif args == 'evilness':
-            self.chanmsg("{C('name', player.name)} has swept the lands with evil.")
+            self.chanmsg(f"{C('name', player.name)} has swept the lands with evil.")
             self.evilness(self._players.online())
         elif args == 'goodness':
-            self.chanmsg("{C('name', player.name)} has drawn down light from the heavens.")
+            self.chanmsg(f"{C('name', player.name)} has drawn down light from the heavens.")
             self.goodness(self._players.online())
         elif args == 'battle':
-            self.chanmsg("{C('name', player.name)} has called forth a gladitorial arena.")
+            self.chanmsg(f"{C('name', player.name)} has called forth a gladitorial arena.")
             self.challenge_opp(self.randchoice('triggered_battle', self._players.online()))
         elif args == 'quest':
-            self.chanmsg("{C('name', player.name)} has called heroes to a quest.")
+            self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             if self._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
