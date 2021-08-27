@@ -1951,7 +1951,7 @@ class DawdleBot(object):
         target.nextlvl -= amount
         direction = 'towards' if amount > 0 else 'away from'
         self.notice(nick, f"{C('name', target.name)} now reaches level {target.level + 1} in {duration(target.nextlvl)}.")
-        self.logchanmsg(f"{C('name', player.name} has pushed {C('name', target.name)} {abs(amount)} seconds {direction} "
+        self.logchanmsg(f"{C('name', player.name)} has pushed {C('name', target.name)} {abs(amount)} seconds {direction} "
                         f"level {target.level + 1}.  {C('name', target.name)} reaches next level "
                         f"in {duration(target.nextlvl)}.")
 
