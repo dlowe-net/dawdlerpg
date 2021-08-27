@@ -147,6 +147,7 @@ class TestPvPBattle(unittest.TestCase):
     def setUp(self):
         dawdle.conf['rpbase'] = 600
         dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -295,6 +296,7 @@ class TestTeamBattle(unittest.TestCase):
     def setUp(self):
         dawdle.conf['rpbase'] = 600
         dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -345,6 +347,7 @@ class TestEvilness(unittest.TestCase):
     def setUp(self):
         dawdle.conf['rpbase'] = 600
         dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -380,6 +383,7 @@ class TestGoodness(unittest.TestCase):
     def setUp(self):
         dawdle.conf['rpbase'] = 600
         dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -408,6 +412,7 @@ class TestHandOfGod(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -448,6 +453,7 @@ class TestQuest(unittest.TestCase):
         dawdle.conf['quest_min_level'] = 24
         dawdle.conf['penquest'] = 15
         dawdle.conf['penlogout'] = 20
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -554,6 +560,7 @@ class TestAdminCommands(unittest.TestCase):
 
     def setUp(self):
         dawdle.conf['rpbase'] = 600
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -591,6 +598,7 @@ class TestGameTick(unittest.TestCase):
         dawdle.conf['self_clock'] = 1
         dawdle.conf['mapx'] = 500
         dawdle.conf['mapy'] = 500
+        dawdle.conf['color'] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)

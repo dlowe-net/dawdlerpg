@@ -72,7 +72,7 @@ def duration(secs):
     d, secs = int(secs / 86400), secs % 86400
     h, secs = int(secs / 3600), secs % 3600
     m, secs = int(secs / 60), secs % 60
-    return f"{d} day{plural(d)}, {h:02d}:{m:02d}:{int(secs):02d}"
+    return C("duration", f"{d} day{plural(d)}, {h:02d}:{m:02d}:{int(secs):02d}")
 
 
 def datapath(path):
@@ -81,6 +81,35 @@ def datapath(path):
     if os.path.isabs(path):
         return path
     return os.path.join(conf["datadir"], path)
+
+
+def CC(color):
+    """Return color code if colors are enabled."""
+    if "color" not in conf or not conf["color"]:
+        return ""
+    colors = {"white": 0, "black": 1, "navy": 2, "green": 3, "red": 4, "maroon": 5, "purple": 6, "olive": 7, "yellow": 8, "lgreen": 9, "teal": 10, "cyan": 11, "blue": 12, "magenta": 13, "gray": 14, "lgray": 15, "default": 99}
+    if color not in colors:
+        return f"[{color}?]"
+    return f"\x03{colors[color]:02d},99"
+
+
+def C(field='', text=''):
+    """Return colorized version of text according to config field.
+
+    If text is specified, returns the colorized version with a formatting reset.
+    If text is not specified, returns just the color code.
+    If field is not specified, returns just a formatting reset.
+    """
+    if "color" not in conf or not conf["color"]:
+        return text
+    if field == "":
+        return "\x0f"
+    conf_field = f"{field}color"
+    if conf_field not in conf:
+        return f"[{conf_field}?]" + text
+    if text == "":
+        return CC(conf[conf_field])
+    return CC(conf[conf_field]) + text + "\x0f"
 
 
 DURATION_RE = re.compile(r"(\d+)([dhms])")
@@ -134,6 +163,10 @@ def read_config(path):
         "quest_interval_min": 12*3600,
         "quest_interval_max": 24*3600,
         "quest_min_level": 24,
+        "color": False,
+        "namecolor": "cyan",
+        "durationcolor": "magenta",
+        "itemcolor": "yellow",
     }
 
     ignore_line_re = re.compile(r"^\s*(?:#|$)")
@@ -1310,6 +1343,8 @@ class DawdleBot(object):
         if 'chanmsgs' in self._silence:
             return
         self._irc.chanmsg(text)
+        # strip color codes for saving to file.
+        text = re.sub(r"\x0f|\x03\d\d?(?:,\d\d?)?", "", text)
         with open(datapath(conf['modsfile']), "a") as ouf:
             ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
 
@@ -1510,14 +1545,14 @@ class DawdleBot(object):
             if conf['allowuserinfo']:
                 self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe, "
                         f"On via server: {self._irc.server}. Admins online: "
-                        f"{', '.join([p.name for p in self._players.online() if p.isadmin])}")
+                        f"{', '.join([C('name', p.name) for p in self._players.online() if p.isadmin])}")
             else:
                 self.notice(nick, "You cannot do 'info'.")
             return
 
         online_count = len(self._players.online())
         q_bytes = sum([len(b) for b in self._irc._writeq])
-        online_admins = [p.name for p in self._players.online() if p.isadmin]
+        online_admins = [CC("name", p.name) for p in self._players.online() if p.isadmin]
         if self._silence:
             silent_mode = ','.join(self._silence)
         else:
@@ -1539,7 +1574,7 @@ class DawdleBot(object):
 
     def cmd_whoami(self, player, nick, args):
         """display game character information."""
-        self.notice(nick, f"You are {player.name}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
+        self.notice(nick, f"You are {C('name', player.name)}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
 
 
     def cmd_announce(self, player, nick, args):
@@ -1560,7 +1595,7 @@ class DawdleBot(object):
         else:
             t = self._players[args]
         self.notice(nick,
-                    f"{t.name}: Level {t.level} {t.cclass}; "
+                    f"{C('name', t.name)}: Level {t.level} {t.cclass}; "
                     f"Status: {'Online' if t.online else 'Offline'}; "
                     f"TTL: {duration(t.nextlvl)}; "
                     f"Idled: {duration(t.idled)}; "
@@ -1570,7 +1605,7 @@ class DawdleBot(object):
     def cmd_login(self, player, nick, args):
         """start playing as existing character."""
         if player:
-            self.notice(nick, f"Sorry, you are already online as {player.name}")
+            self.notice(nick, f"Sorry, you are already online as {C('name', player.name)}")
             return
         if nick not in self._irc._users:
             self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
@@ -1596,14 +1631,14 @@ class DawdleBot(object):
         player.userhost = self._irc._users[nick].userhost
         player.lastlogin = time.time()
         self._players.write()
-        self.chanmsg(f"{player.name}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
+        self.chanmsg(f"{C('name', player.name)}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
         self.notice(nick, f"Logon successful. Next level in {duration(player.nextlvl)}.")
 
 
     def cmd_register(self, player, nick, args):
         """start game as new player."""
         if player:
-            self.notice(nick, f"Sorry, you are already online as {player.name}")
+            self.notice(nick, f"Sorry, you are already online as {C('name', player.name)}")
             return
         if nick not in self._irc._users:
             self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
@@ -1660,8 +1695,8 @@ class DawdleBot(object):
         elif not self._players.check_login(player.name, args):
             self.notice(nick, "Wrong password.")
         else:
-            self.notice(nick, f"Account {player.name} removed.")
-            self.chanmsg(f"{nick} removed their account. {player.name}, the level {player.level} {player.cclass} is no more.")
+            self.notice(nick, f"Account {C('name', player.name)} removed.")
+            self.chanmsg(f"{nick} removed their account. {C('name', player.name)}, the level {player.level} {player.cclass} is no more.")
             self._players.delete_player(player.name)
             if conf['voiceonlogin'] and self._irc.bot_has_ops():
                 self._irc.revoke_voice(nick)
@@ -1809,7 +1844,7 @@ class DawdleBot(object):
         for pname in old:
             self._players.delete_player(pname)
         self.chanmsg(f"{len(old)} account{plural(len(old))} not accessed "
-                     f"in the last {days} days removed by {player.name}.")
+                     f"in the last {days} days removed by {C('name', player.name)}.")
 
 
     def cmd_die(self, player, nick, args):
@@ -1910,14 +1945,14 @@ class DawdleBot(object):
 
         if amount > player.nextlvl:
             self.notice(nick,
-                        f"Time to level for {player.name} ({player.nextlvl}s) "
+                        f"Time to level for {C('name', player.name)} ({player.nextlvl}s) "
                         f"is lower than {amount}; setting TTL to 0.")
             amount = player.nextlvl
         player.nextlvl -= amount
         direction = 'towards' if amount > 0 else 'away from'
-        self.notice(nick, f"{player.name} now reaches level {player.level + 1} in {duration(player.nextlvl)}.")
-        self.logchanmsg(f"{nick} has pushed {player.name} {abs(amount)} seconds {direction} "
-                        f"level {player.level + 1}.  {player.name} reaches next level "
+        self.notice(nick, f"{C('name', player.name)} now reaches level {player.level + 1} in {duration(player.nextlvl)}.")
+        self.logchanmsg(f"{nick} has pushed {C('name', player.name)} {abs(amount)} seconds {direction} "
+                        f"level {player.level + 1}.  {C('name', player.name)} reaches next level "
                         f"in {duration(player.nextlvl)}.")
 
 
@@ -1957,19 +1992,19 @@ class DawdleBot(object):
         elif self._quest.mode == 1:
             qp = self._quest.questors
             self.notice(nick,
-                             f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                             f"are on a quest to {self._quest.text}. Quest to complete in "
-                             f"{duration(self._quest.qtime - time.time())}.")
+                        f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
+                        f"are on a quest to {self._quest.text}. Quest to complete in "
+                        f"{duration(self._quest.qtime - time.time())}.")
         elif self._quest.mode == 2:
             qp = self._quest.questors
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
             self.notice(nick,
-                             f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
-                             f"are on a quest to {self._quest.text}. Participants must first reach "
-                             f"({self._quest.dests[0][0]}, {self._quest.dests[0][1]}), then "
-                             f"({self._quest.dests[1][0]}, {self._quest.dests[1][1]}).{mapnotice}")
+                        f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
+                        f"are on a quest to {self._quest.text}. Participants must first reach "
+                        f"({self._quest.dests[0][0]}, {self._quest.dests[0][1]}), then "
+                        f"({self._quest.dests[1][0]}, {self._quest.dests[1][1]}).{mapnotice}")
 
 
     def penalize(self, player, kind, text=None):
@@ -1979,7 +2014,7 @@ class DawdleBot(object):
             return
 
         if self._quest and player in self._quest.questors:
-            self.logchanmsg(f"{player.name}'s insolence has brought the wrath of "
+            self.logchanmsg(f"{C('name', player.name)}'s insolence has brought the wrath of "
                             f"the gods down upon them.  Your great wickedness "
                             f"burdens you like lead, drawing you downwards with "
                             f"great force towards hell. Thereby have you plunged "
@@ -2090,7 +2125,7 @@ class DawdleBot(object):
             if top:
                 self.chanmsg("Idle RPG Top Players:")
                 for i, p in zip(itertools.count(), top):
-                    self.chanmsg(f"{p.name}, the level {p.level} {p.cclass}, is #{i+1}! "
+                    self.chanmsg(f"{C('name', p.name)}, the level {p.level} {p.cclass}, is #{i+1}! "
                                  f"Next level in {duration(p.nextlvl)}.")
             self._players.backup_store()
         # high level players fight each other randomly
@@ -2113,7 +2148,7 @@ class DawdleBot(object):
                 else:
                     player.nextlvl = int(conf['rpbase'] * (conf['rpstep'] ** player.level))
 
-                self.chanmsg(f"{player.name}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{C('name', player.name)}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
                 # Players below level 25 have fewer battles.
                 if player.level >= 25 or self.randomly('lowlevel_battle', 4):
@@ -2125,12 +2160,12 @@ class DawdleBot(object):
         player = self.randchoice('hog_player', op)
         amount = int(player.nextlvl * (5 + self.randint('hog_amount', 0, 71))/100)
         if self.randomly('hog_effect', 5):
-            self.logchanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {player.name} {duration(amount)} toward level {player.level + 1}.")
+            self.logchanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {C('name', player.name)} {duration(amount)} toward level {player.level + 1}.")
             player.nextlvl -= amount
         else:
-            self.logchanmsg(f"Thereupon He stretched out His little finger among them and consumed {player.name} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
+            self.logchanmsg(f"Thereupon He stretched out His little finger among them and consumed {C('name', player.name)} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
             player.nextlvl += amount
-        self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+        self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
         self._players.write()
 
 
@@ -2167,7 +2202,7 @@ class DawdleBot(object):
                 player.acquire_item(si.kind, ilvl, si.name)
                 self.notice(player.nick,
                                  f"The light of the gods shines down upon you! You have "
-                                 f"found the level {ilvl} {si.name}!  {si.flavor}")
+                                 f"found the {C('item')}level {ilvl} {si.name}{C()}!  {si.flavor}")
                 return
 
         item = self.randchoice('find_item_itemtype', Player.ITEMS)
@@ -2182,16 +2217,16 @@ class DawdleBot(object):
         old_level = int(getattr(player, item))
         if level > old_level:
             self.notice(player.nick,
-                             f"You found a level {level} {Player.ITEMDESC[item]}! "
-                             f"Your current {Player.ITEMDESC[item]} is only "
+                             f"You found a {C('item')}level {level} {Player.ITEMDESC[item]}{C()}! "
+                             f"Your current {C('item')}{Player.ITEMDESC[item]}{C()} is only "
                              f"level {old_level}, so it seems Luck is with you!")
             player.acquire_item(item, level)
             self._players.write()
         else:
             self.notice(player.nick,
-                             f"You found a level {level} {Player.ITEMDESC[item]}. "
-                             f"Your current {Player.ITEMDESC[item]} is level {old_level}, "
-                             f"so it seems Luck is against you.  You toss the {Player.ITEMDESC[item]}.")
+                             f"You found a {C('item')}level {level} {Player.ITEMDESC[item]}{C()}. "
+                             f"Your current {C('item', Player.ITEMDESC[item])} is level {old_level}, "
+                             f"so it seems Luck is against you.  You toss the {C('item', Player.ITEMDESC[item])}.")
 
 
     def pvp_battle(self, player, opp, flavor_start, flavor_win, flavor_loss):
@@ -2209,40 +2244,40 @@ class DawdleBot(object):
         if playerroll >= opproll:
             gain = 20 if opp is None else max(7, int(opp.level / 4))
             amount = int((gain / 100)*player.nextlvl)
-            self.logchanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
-                            f"{oppname} [{opproll}/{oppsum}] {flavor_win}! "
-                            f"{duration(amount)} is removed from {player.name}'s clock.")
+            self.logchanmsg(f"{C('name', player.name)} [{playerroll}/{playersum}] has {flavor_start} "
+                            f"{C('name', oppname)} [{opproll}/{oppsum}] {flavor_win}! "
+                            f"{duration(amount)} is removed from {C('name', player.name)}'s clock.")
             player.nextlvl -= amount
             if player.nextlvl > 0:
-                self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
             if opp is not None:
                 if self.randomly('pvp_critical', {'g': 50, 'n': 35, 'e': 20}[player.alignment]):
                     penalty = int(((5 + self.randint('pvp_cs_penalty_pct', 0, 20))/100 * opp.nextlvl))
-                    self.logchanmsg(f"{player.name} has dealt {opp.name} a Critical Strike! "
-                                    f"{duration(penalty)} is added to {opp.name}'s clock.")
+                    self.logchanmsg(f"{C('name', player.name)} has dealt {C('name', opp.name)} a {CC('red')}Critical Strike{C()}! "
+                                    f"{duration(penalty)} is added to {C('name', opp.name)}'s clock.")
                     opp.nextlvl += penalty
-                    self.chanmsg(f"{opp.name} reaches next level in {duration(opp.nextlvl)}.")
+                    self.chanmsg(f"{C('name', opp.name)} reaches next level in {duration(opp.nextlvl)}.")
                 elif player.level > 19 and self.randomly('pvp_swap_item', 25):
                     item = self.randchoice('pvp_swap_itemtype', Player.ITEMS)
                     playeritem = getattr(player, item)
                     oppitem = getattr(opp, item)
                     if oppitem > playeritem:
-                        self.logchanmsg(f"In the fierce battle, {opp.name} dropped their level "
-                                        f"{oppitem} {Player.ITEMDESC[item]}! {player.name} picks it up, tossing "
-                                        f"their old level {playeritem} {Player.ITEMDESC[item]} to {opp.name}.")
+                        self.logchanmsg(f"In the fierce battle, {C('name', opp.name)} dropped their {C('item')}level "
+                                        f"{oppitem} {Player.ITEMDESC[item]}{C()}! {C('name', player.name)} picks it up, tossing "
+                                        f"their old {C('item')}level {playeritem} {Player.ITEMDESC[item]}{C()} to {C('name', opp.name)}.")
                         player.swap_items(opp, item)
         else:
             # Losing
             loss = 10 if opp is None else max(7, int(opp.level / 7))
             amount = int((loss / 100)*player.nextlvl)
-            self.logchanmsg(f"{player.name} [{playerroll}/{playersum}] has {flavor_start} "
+            self.logchanmsg(f"{C('name', player.name)} [{playerroll}/{playersum}] has {flavor_start} "
                             f"{oppname} [{opproll}/{oppsum}] {flavor_loss}! {duration(amount)} is "
-                            f"added to {player.name}'s clock.")
+                            f"added to {C('name', player.name)}'s clock.")
             player.nextlvl += amount
-            self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
         if self.randomly('pvp_find_item', {'g': 50, 'n': 67, 'e': 100}[player.alignment]):
-            self.chanmsg(f"While recovering from battle, {player.name} notices a glint "
+            self.chanmsg(f"While recovering from battle, {C('name', player.name)} notices a glint "
                          f"in the mud. Upon investigation, they find an old lost item!")
             self.find_item(player)
 
@@ -2266,14 +2301,14 @@ class DawdleBot(object):
         roll_a = self.randint('team_a_roll', 0, team_a)
         roll_b = self.randint('team_b_roll', 0, team_b)
         if roll_a >= roll_b:
-            self.logchanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
-                            f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
+            self.logchanmsg(f"{C('name', op[0].name)}, {C('name', op[1].name)}, and {C('name', op[2].name)} [{roll_a}/{team_a}] "
+                            f"have team battled {C('name', op[3].name)}, {C('name', op[4].name)}, and {C('name', op[5].name)} "
                             f"[{roll_b}/{team_b}] and won!  {duration(gain)} is removed from their clocks.")
             for p in op[0:3]:
                 p.nextlvl -= gain
         else:
-            self.logchanmsg(f"{op[0].name}, {op[1].name}, and {op[2].name} [{roll_a}/{team_a}] "
-                            f"have team battled {op[3].name}, {op[4].name}, and {op[5].name} "
+            self.logchanmsg(f"{C('name', op[0].name)}, {C('name', op[1].name)}, and {C('name', op[2].name)} [{roll_a}/{team_a}] "
+                            f"have team battled {C('name', op[3].name)}, {C('name', op[4].name)}, and {C('name', op[5].name)} "
                             f"[{roll_b}/{team_b}] and lost!  {duration(gain)} is added to their clocks.")
             for p in op[0:3]:
                 p.nextlvl += gain
@@ -2289,26 +2324,26 @@ class DawdleBot(object):
             # Item damaging calamity
             item = self.randchoice('calamity_item', Player.ITEMS)
             if item == "ring":
-                msg = f"{player.name} accidentally smashed their ring with a hammer!"
+                msg = f"{C('name', player.name)} accidentally smashed their ring with a hammer!"
             elif item == "amulet":
-                msg = f"{player.name} fell, chipping the stone in their amulet!"
+                msg = f"{C('name', player.name)} fell, chipping the stone in their amulet!"
             elif item == "charm":
-                msg = f"{player.name} slipped and dropped their charm in a dirty bog!"
+                msg = f"{C('name', player.name)} slipped and dropped their charm in a dirty bog!"
             elif item == "weapon":
-                msg = f"{player.name} left their weapon out in the rain to rust!"
+                msg = f"{C('name', player.name)} left their weapon out in the rain to rust!"
             elif item == "helm":
-                msg = f"{player.name}'s helm was touched by a rust monster!"
+                msg = f"{C('name', player.name)}'s helm was touched by a rust monster!"
             elif item == "tunic":
-                msg = f"{player.name} spilled a level 7 shrinking potion on their tunic!"
+                msg = f"{C('name', player.name)} spilled a level 7 shrinking potion on their tunic!"
             elif item == "gloves":
-                msg = f"{player.name} dipped their gloved fingers in a pool of acid!"
+                msg = f"{C('name', player.name)} dipped their gloved fingers in a pool of acid!"
             elif item == "leggings":
-                msg = f"{player.name} burned a hole through their leggings while ironing them!"
+                msg = f"{C('name', player.name)} burned a hole through their leggings while ironing them!"
             elif item == "shield":
-                msg = f"{player.name}'s shield was damaged by a dragon's fiery breath!"
+                msg = f"{C('name', player.name)}'s shield was damaged by a dragon's fiery breath!"
             elif item == "boots":
-                msg = f"{player.name} stepped in some hot lava!"
-            self.logchanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} loses 10% of its effectiveness.")
+                msg = f"{C('name', player.name)} stepped in some hot lava!"
+            self.logchanmsg(msg + f" {C('name', player.name)}'s {C('item', Player.ITEMDESC[item])} loses 10% of its effectiveness.")
             setattr(player, item, int(getattr(player, item) * 0.9))
             return
 
@@ -2316,10 +2351,10 @@ class DawdleBot(object):
         amount = int(self.randint('calamity_setback_pct', 5, 13) / 100 * player.nextlvl)
         player.nextlvl += amount
         action = self.randchoice('calamity_action', self._events["C"])
-        self.logchanmsg(f"{player.name} {action}! This terrible calamity has slowed them "
+        self.logchanmsg(f"{C('name', player.name)} {action}! This terrible calamity has slowed them "
                         f"{duration(amount)} from level {player.level + 1}.")
         if player.nextlvl > 0:
-            self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
 
     def godsend(self):
@@ -2332,27 +2367,27 @@ class DawdleBot(object):
             # Item improving godsend
             item = self.randchoice('godsend_item', Player.ITEMS)
             if item == "ring":
-                msg = f"{player.name} dipped their ring into a sacred fountain!"
+                msg = f"{C('name', player.name)} dipped their ring into a sacred fountain!"
             elif item == "amulet":
-                msg = f"{player.name}'s amulet was blessed by a passing cleric!"
+                msg = f"{C('name', player.name)}'s amulet was blessed by a passing cleric!"
             elif item == "charm":
-                msg = f"{player.name}'s charm ate a bolt of lightning!"
+                msg = f"{C('name', player.name)}'s charm ate a bolt of lightning!"
             elif item == "weapon":
-                msg = f"{player.name} sharpened the edge of their weapon!"
+                msg = f"{C('name', player.name)} sharpened the edge of their weapon!"
             elif item == "helm":
-                msg = f"{player.name} polished their helm to a mirror shine."
+                msg = f"{C('name', player.name)} polished their helm to a mirror shine."
             elif item == "tunic":
-                msg = f"A magician cast a spell of Rigidity on {player.name}'s tunic!"
+                msg = f"A magician cast a spell of Rigidity on {C('name', player.name)}'s tunic!"
             elif item == "gloves":
-                msg = f"{player.name} lined their gloves with a magical cloth!"
+                msg = f"{C('name', player.name)} lined their gloves with a magical cloth!"
             elif item == "leggings":
-                msg = f"The local wizard imbued {player.name}'s pants with a Spirit of Fortitude!"
+                msg = f"The local wizard imbued {C('name', player.name)}'s pants with a Spirit of Fortitude!"
             elif item == "shield":
-                msg = f"{player.name} reinforced their shield with a dragon's scale!"
+                msg = f"{C('name', player.name)} reinforced their shield with a dragon's scale!"
             elif item == "boots":
-                msg = f"A sorceror enchanted {player.name}'s boots with Swiftness!"
+                msg = f"A sorceror enchanted {C('name', player.name)}'s boots with Swiftness!"
 
-            self.logchanmsg(msg + f" {player.name}'s {Player.ITEMDESC[item]} gains 10% effectiveness.")
+            self.logchanmsg(msg + f" {C('name', player.name)}'s {C('item', Player.ITEMDESC[item])} gains 10% effectiveness.")
             setattr(player, item, int(getattr(player, item) * 1.1))
             return
 
@@ -2360,10 +2395,10 @@ class DawdleBot(object):
         amount = int(self.randint('godsend_amount_pct', 5, 13) / 100 * player.nextlvl)
         player.nextlvl -= amount
         action = self.randchoice('godsend_action', self._events["G"])
-        self.logchanmsg(f"{player.name} {action}! This wondrous godsend has accelerated them "
+        self.logchanmsg(f"{C('name', player.name)} {action}! This wondrous godsend has accelerated them "
                         f"{duration(amount)} towards level {player.level + 1}.")
         if player.nextlvl > 0:
-            self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+            self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
 
     def evilness(self, op):
@@ -2379,22 +2414,22 @@ class DawdleBot(object):
             item = self.randchoice('evilness_item', Player.ITEMS)
             if getattr(player, item) < getattr(target, item):
                 player.swap_items(target, item)
-                self.logchanmsg(f"{player.name} stole {target.name}'s level {getattr(player, item)} "
-                                f"{Player.ITEMDESC[item]} while they were sleeping!  {player.name} "
-                                f"leaves their old level {getattr(target, item)} {Player.ITEMDESC[item]} "
-                                f"behind, which {target.name} then takes.")
+                self.logchanmsg(f"{C('name', player.name)} stole {target.name}'s {C('item')}level {getattr(player, item)} "
+                                f"{Player.ITEMDESC[item]}{C()} while they were sleeping!  {C('name', player.name)} "
+                                f"leaves their old {C('item')}level {getattr(target, item)} {Player.ITEMDESC[item]}{C()} "
+                                f"behind, which {C('name', target.name)} then takes.")
             else:
                 self.notice(player.nick,
-                            f"You made to steal {target.name}'s {Player.ITEMDESC[item]}, "
+                            f"You made to steal {C('name', target.name)}'s {C('item', Player.ITEMDESC[item])}, "
                             f"but realized it was lower level than your own.  You creep "
                             f"back into the shadows.")
         else:
             amount = int(player.nextlvl * self.randint('evilness_penalty_pct', 1,6) / 100)
             player.nextlvl += amount
-            self.logchanmsg(f"{player.name} is forsaken by their evil god. {duration(amount)} is "
+            self.logchanmsg(f"{C('name', player.name)} is forsaken by their evil god. {duration(amount)} is "
                               f"added to their clock.")
             if player.nextlvl > 0:
-                self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
     def goodness(self, op):
         """Bring two good players closer to their next level."""
@@ -2403,14 +2438,14 @@ class DawdleBot(object):
             return
         players = self.randsample('goodness_players', good_p, 2)
         gain = self.randint('goodness_gain_pct', 5, 13)
-        self.logchanmsg(f"{players[0].name} and {players[1].name} have not let the iniquities "
+        self.logchanmsg(f"{C('name', players[0].name)} and {C('name', players[1].name)} have not let the iniquities "
                         f"of evil people poison them. Together have they prayed to their god, "
                         f"and light now shines down upon them. {gain}% of their time is removed "
                         f"from their clocks.")
         for player in players:
             player.nextlvl = int(player.nextlvl * (1 - gain / 100))
             if player.nextlvl > 0:
-                self.chanmsg(f"{player.name} reaches next level in {duration(player.nextlvl)}.")
+                self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
 
     def move_players(self):
@@ -2454,7 +2489,7 @@ class DawdleBot(object):
             if (p.posx, p.posy) in combatants:
                 combatant = combatants[(p.posx, p.posy)]
                 if combatant.isadmin and self.randomly('move_player_bow', 100):
-                    self.chanmsg(f"{p.name} encounters {combatant.name} and bows humbly.")
+                    self.chanmsg(f"{C('name', p.name)} encounters {C('name', combatant.name)} and bows humbly.")
                 elif self.randomly('move_player_combat', len(op)):
                     self.pvp_battle(p, combatant,
                                     'come upon',
@@ -2483,7 +2518,7 @@ class DawdleBot(object):
             self._quest.mode = 1
             self._quest.text = match[2]
             self._quest.qtime = time.time() + quest_time
-            self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+            self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
                               f"been chosen by the gods to {self._quest.text}.  Quest to end in "
                               f"{duration(quest_time)}.")
         elif match[1] == '2':
@@ -2494,7 +2529,7 @@ class DawdleBot(object):
             mapnotice = ''
             if 'mapurl' in conf:
                 mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
-            self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} have "
+            self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
                          f"been chosen by the gods to {self._quest.text}.  Participants must first "
                          f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
                          f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
@@ -2508,7 +2543,7 @@ class DawdleBot(object):
         elif self._quest.mode == 1:
             if now >= self._quest.qtime:
                 qp = self._quest.questors
-                self.logchanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                self.logchanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                                 f"have blessed the realm by completing their quest! 25% of "
                                 f"their burden is eliminated.")
                 for q in qp:
@@ -2529,12 +2564,12 @@ class DawdleBot(object):
                 qp = self._quest.questors
                 dests_left = len(self._quest.dests) - self._quest.stage + 1
                 if dests_left > 0:
-                    self.chanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                    self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                                  f"have reached a landmark on their journey! {dests_left} "
                                  f"landmark{plural(dests_left)} "
                                  f"remain{plural(dests_left, 's', '')}.")
                 else:
-                    self.logchanmsg(f"{qp[0].name}, {qp[1].name}, {qp[2].name}, and {qp[3].name} "
+                    self.logchanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                                     f"have completed their journey! 25% of "
                                     f"their burden is eliminated.")
                     for q in qp:
