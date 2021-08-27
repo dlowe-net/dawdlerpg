@@ -2063,7 +2063,7 @@ class DawdleBot(object):
         for p in self._players.online():
             if p.nick not in self._irc._users and p.lastlogin < expiration:
                 log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
-                self.penalize(player, "dropped")
+                self.penalize(p, "dropped")
                 p.online = False
         self._players.write()
 
