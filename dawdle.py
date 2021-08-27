@@ -165,7 +165,7 @@ def read_config(path):
         "quest_min_level": 24,
         "color": False,
         "namecolor": "cyan",
-        "durationcolor": "magenta",
+        "durationcolor": "green",
         "itemcolor": "yellow",
     }
 
