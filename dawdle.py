@@ -1541,18 +1541,22 @@ class DawdleBot(object):
 
     def cmd_info(self, player, nick, args):
         """display bot information and admin list."""
-        if not player.isadmin:
+        admins = [p for p in self._players.online() if p.isadmin]
+        if admins:
+            admin_notice = "Admins online: " + ", ".join(admins)
+        else:
+            admin_notice = "No admins online."
+        if not player or not player.isadmin:
             if conf['allowuserinfo']:
                 self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe, "
-                        f"On via server: {self._irc.server}. Admins online: "
-                        f"{', '.join([C('name', p.name) for p in self._players.online() if p.isadmin])}")
+                            f"On via server: {self._irc.server}. "
+                            f"{admin_notice}")
             else:
                 self.notice(nick, "You cannot do 'info'.")
             return
 
         online_count = len(self._players.online())
         q_bytes = sum([len(b) for b in self._irc._writeq])
-        online_admins = [C("name", p.name) for p in self._players.online() if p.isadmin]
         if self._silence:
             silent_mode = ','.join(self._silence)
         else:

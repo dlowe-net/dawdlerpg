@@ -103,6 +103,7 @@ class FakeIRCClient(object):
     def __init__(self):
         self._nick = 'dawdlerpg'
         self._users = {}
+        self.server = "irc.example.com"
         self.chanmsgs = []
         self.notices = {}
 
@@ -581,6 +582,24 @@ class TestAdminCommands(unittest.TestCase):
         self.assertNotIn(op[1].name, self.bot._players)
         self.assertIn(op[2].name, self.bot._players)
         self.assertIn(op[3].name, self.bot._players)
+
+
+class TestPlayerCommands(unittest.TestCase):
+
+    def setUp(self):
+        dawdle.conf['rpbase'] = 600
+        dawdle.conf['color'] = False
+        dawdle.conf['allowuserinfo'] = True
+        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+    def test_cmd_info(self):
+        self.bot.cmd_info(None, "foo", "")
+        self.assertIn("DawdleRPG v", self.irc.notices["foo"][0])
+        player = self.bot._players.new_player("bar", 'a', 'b')
+        self.bot.cmd_info(player, "bar", "")
+        self.assertIn("DawdleRPG v", self.irc.notices["bar"][0])
 
 
 class TestGameTick(unittest.TestCase):
