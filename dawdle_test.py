@@ -590,9 +590,16 @@ class TestPlayerCommands(unittest.TestCase):
         dawdle.conf['rpbase'] = 600
         dawdle.conf['color'] = False
         dawdle.conf['allowuserinfo'] = True
+        dawdle.conf['helpurl'] = "http://example.com/"
+        dawdle.conf['botchan'] = "#dawdlerpg"
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
+
+    def test_unrestricted_commands_without_player(self):
+        for cmd in dawdle.DawdleBot.ALLOWALL:
+            # We don't care what it does, as long as it doesn't crash.
+            getattr(self.bot, f"cmd_{cmd}")(None, "foo", "")
 
     def test_cmd_info(self):
         self.bot.cmd_info(None, "foo", "")
