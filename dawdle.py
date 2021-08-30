@@ -1479,10 +1479,12 @@ class DawdleBot(object):
 
 
     def nick_dropped(self, src):
-        """Called when someone was disconnected."""
+        """Called when someone was disconnected through no fault of their own."""
         player = self._players.from_nick(src)
         if player:
+            player.online = False
             player.lastlogin = time.time()
+            self._players.write()
 
 
     def nick_quit(self, src):
