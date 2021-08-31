@@ -56,7 +56,7 @@ class TestPlayerDBIdleRPG(unittest.TestCase):
 
 class TestIRCMessage(unittest.TestCase):
     def test_basic(self):
-        line = "@time=2021-07-31T13:55:00,bar=baz :nick!example@example.com PART #example :later!"
+        line = "@time=2021-07-31T13:55:00;bar=baz :nick!example@example.com PART #example :later!"
         msg = dawdle.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {"time": "2021-07-31T13:55:00", "bar": "baz"})
         self.assertEqual(msg.src, "nick")
@@ -79,6 +79,15 @@ class TestIRCMessage(unittest.TestCase):
         self.assertEqual(msg.args, ["baz"])
         self.assertEqual(msg.trailing, "baz")
         self.assertEqual(msg.line, line)
+
+    def test_complextags(self):
+        line = "@keyone=one\\sbig\\:value;keytwo=t\\wo\\rbig\\n\\\\values :nick!example@example.com PART #example :later!"
+        msg = dawdle.IRCClient.parse_message(None, line)
+        self.assertEqual(msg.tags, {
+            "keyone": "one big;value",
+            "keytwo": "two\rbig\n\\values",
+            })
+
 
     def test_notags(self):
         line = ":nick!example@example.com PART #example :later!"
@@ -658,7 +667,7 @@ class TestPlayerCommands(unittest.TestCase):
         self.assertIn("DawdleRPG v", self.irc.notices["bar"][0])
 
     def test_cmd_login(self):
-        
+
         self.bot.cmd_login(None, "foo", "bar baz")
         self.irc._users['foo'] = dawdle.IRCClient.User("foo", "foo@example.com", [], 1)
         self.assertEqual("Sorry, you aren't on #dawdlerpg.", self.irc.notices["foo"][0])

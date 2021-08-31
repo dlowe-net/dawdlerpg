@@ -911,10 +911,12 @@ class IRCClient:
         # IRCv3 supports tags
         tags = dict()
         if rawtags is not None and rawtags != "":
-            for pairstr in rawtags.split(','):
+            for pairstr in rawtags.split(';'):
                 pair = pairstr.split('=')
                 if len(pair) == 2:
-                    tags[pair[0]] = pair[1]
+                    tags[pair[0]] = re.sub(r"\\(.)",
+                                           lambda m: {":": ";", "s": " ", "r": "\r", "n": "\n"}.get(m[1], m[1]),
+                                           pair[1])
                 else:
                     tags[pair[0]] = None
         # Arguments before the trailing argument (after the colon) are space-delimited
