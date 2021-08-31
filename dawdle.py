@@ -797,6 +797,15 @@ class IRCClient:
         self._bytes_sent = 0
         self._bytes_received = 0
         self._caps = set()
+        self._server = None
+        self._messages_sent = 0
+        self._writeq = []
+        self._flushq_task = None
+        self._prefixmodes = {}
+        self._maxmodes = 3
+        self._modetypes = {}
+        self._users = {}
+        self._caps = set()             # all enabled capabilities
         self.quitting = False
 
 

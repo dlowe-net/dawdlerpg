@@ -107,6 +107,10 @@ class FakeIRCClient(object):
         self.chanmsgs = []
         self.notices = {}
 
+    def resetmsgs(self):
+        self.chanmsgs = []
+        self.notices = {}
+
     def chanmsg(self, text):
         self.chanmsgs.append(text)
 
@@ -141,6 +145,38 @@ class FakePlayerStore(dawdle.PlayerStore):
     def delete(self, pname):
         self._mem.pop(pname)
 
+
+class TestIRCClient(unittest.TestCase):
+
+    def test_nick_change(self):
+        dawdle.conf['botnick'] = 'dawdlerpg'
+        bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        irc = dawdle.IRCClient(bot)
+        irc.handle_join(dawdle.IRCClient.Message(tags={}, src='foo', user=None, host=None, cmd='NICK', args=['#dawdlerpg'], trailing='', line='', time=0))
+        irc.handle_nick(dawdle.IRCClient.Message(tags={}, src='foo', user=None, host=None, cmd='NICK', args=['bar'], trailing='bar', line='', time=0))
+        self.assertNotIn('foo', irc._users)
+        self.assertIn('bar', irc._users)
+
+
+class TestDawdleBot(unittest.TestCase):
+
+    def test_nick_change(self):
+        dawdle.conf['botnick'] = 'dawdlerpg'
+        dawdle.conf['botchan'] = '#dawdlerpg'
+        dawdle.conf['message_wrap_len'] = 400
+        dawdle.conf['throttle'] = False
+        dawdle.conf['pennick'] = 10
+        dawdle.conf['penquit'] = 20
+        dawdle.conf['rppenstep'] = 1.14
+        bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        bot.connected(FakeIRCClient())
+        a = bot._players.new_player('a', 'b', 'c')
+        a.online = True
+        a.nick = 'foo'
+        self.assertEqual('foo', a.nick)
+        bot.nick_changed('foo', 'bar')
+        self.assertEqual('bar', a.nick)
+        bot.nick_quit('bar')
 
 class TestPvPBattle(unittest.TestCase):
 
@@ -592,6 +628,7 @@ class TestPlayerCommands(unittest.TestCase):
         dawdle.conf['allowuserinfo'] = True
         dawdle.conf['helpurl'] = "http://example.com/"
         dawdle.conf['botchan'] = "#dawdlerpg"
+        dawdle.conf["voiceonlogin"] = False
         self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
@@ -607,6 +644,17 @@ class TestPlayerCommands(unittest.TestCase):
         player = self.bot._players.new_player("bar", 'a', 'b')
         self.bot.cmd_info(player, "bar", "")
         self.assertIn("DawdleRPG v", self.irc.notices["bar"][0])
+
+    def test_cmd_login(self):
+        
+        self.bot.cmd_login(None, "foo", "bar baz")
+        self.irc._users['foo'] = dawdle.IRCClient.User("foo", "foo@example.com", [], 1)
+        self.assertEqual("Sorry, you aren't on #dawdlerpg.", self.irc.notices["foo"][0])
+        self.irc.resetmsgs()
+        player = self.bot._players.new_player("bar", 'a', 'b')
+        player.set_password("baz")
+        self.bot.cmd_login(None, "foo", "bar baz")
+        self.assertIn("foo", self.irc.chanmsgs[0])
 
 
 class TestGameTick(unittest.TestCase):
