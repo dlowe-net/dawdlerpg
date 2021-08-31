@@ -1554,7 +1554,7 @@ class DawdleBot(object):
 
     def cmd_info(self, player, nick, args):
         """display bot information and admin list."""
-        admins = [p for p in self._players.online() if p.isadmin]
+        admins = [C('name', p.name) for p in self._players.online() if p.isadmin]
         if admins:
             admin_notice = "Admins online: " + ", ".join(admins)
         else:
