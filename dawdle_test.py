@@ -199,6 +199,19 @@ class TestDawdleBot(unittest.TestCase):
         self.assertEqual('bar', a.nick)
         bot.nick_quit('bar')
 
+class TestPlayerDB(unittest.TestCase):
+
+    def test_top_players(self):
+        db = dawdle.PlayerDB(FakePlayerStore())
+        a = db.new_player('a', 'waffle', 'c')
+        a.level, a.nextlvl = 30, 100
+        b = db.new_player('b', 'doughnut', 'c')
+        b.level, b.nextlvl = 20, 1000
+        c = db.new_player('c', 'bagel', 'c')
+        c.level, c.nextlvl = 10, 10
+        self.assertEqual(['a', 'b', 'c'], [p.name for p in db.top_players()])
+
+
 class TestPvPBattle(unittest.TestCase):
 
 

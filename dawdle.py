@@ -725,8 +725,7 @@ class PlayerDB(object):
 
     def top_players(self):
         """Return the top three players."""
-        s = sorted(self._players.values(), key=attrgetter('level'))
-        return sorted(s, key=attrgetter('nextlvl'), reverse=True)[:3]
+        return sorted(self._players.values(), key=lambda p: (-p.level, p.nextlvl))[:3]
 
 
     def inactive_since(self, expire):
