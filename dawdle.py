@@ -1608,11 +1608,11 @@ class DawdleBot(object):
 
     def cmd_login(self, player, nick, args):
         """start playing as existing character."""
-        if player:
-            self.notice(nick, f"Sorry, you are already online as {C('name', player.name)}")
-            return
         if nick not in self._irc._users:
             self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            return
+        if player and self._irc.match_user(player.nick, player.userhost):
+            self.notice(nick, f"You are already online as {C('name', player.name)}")
             return
 
         parts = args.split(' ', 1)
@@ -1629,14 +1629,19 @@ class DawdleBot(object):
         # Success!
         if conf['voiceonlogin'] and self._irc.bot_has_ops():
             self._irc.grant_voice(nick)
-        player = self._players[pname]
-        player.online = True
-        player.nick = nick
-        player.userhost = self._irc._users[nick].userhost
-        player.lastlogin = time.time()
+        p = self._players[pname]
+        p.userhost = self._irc._users[nick].userhost
+        p.lastlogin = time.time()
+        if p.online and p.nick == nick:
+            # If the player was already online and they have the same
+            # nick, they need no reintroduction to the channel.
+            self.notice(nick, f"Welcome back, {C('name', p.name)}. Next level in {duration(p.nextlvl)}.")
+        else:
+            p.online = True
+            p.nick = nick
+            self.notice(nick, f"Logon successful. Next level in {duration(p.nextlvl)}.")
+            self.chanmsg(f"{C('name', p.name)}, the level {p.level} {p.cclass}, is now online from nickname {nick}. Next level in {duration(p.nextlvl)}.")
         self._players.write()
-        self.chanmsg(f"{C('name', player.name)}, the level {player.level} {player.cclass}, is now online from nickname {nick}. Next level in {duration(player.nextlvl)}.")
-        self.notice(nick, f"Logon successful. Next level in {duration(player.nextlvl)}.")
 
 
     def cmd_register(self, player, nick, args):
