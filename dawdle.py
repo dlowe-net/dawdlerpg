@@ -1556,7 +1556,7 @@ class DawdleBot(object):
         """display bot information and admin list."""
         admins = [C('name', p.name) for p in self._players.online() if p.isadmin]
         if admins:
-            admin_notice = "Admins online: " + ", ".join(admins)
+            admin_notice = "Admin{plural(len(admins))} online: " + ", ".join(admins)
         else:
             admin_notice = "No admins online."
         if not player or not player.isadmin:
@@ -1586,7 +1586,7 @@ class DawdleBot(object):
                     f"Outgoing queue is {q_bytes} byte{plural(q_bytes)} "
                     f"in {len(self._irc._writeq)} item{plural(len(self._irc._writeq))}. "
                     f"On via: {self._irc._server}. "
-                    f"Admin{plural(len(online_admins))} online: {', '.join(online_admins)}")
+                    f"Admin{plural(len(admins))} online: {', '.join(admins)}")
 
 
     def cmd_whoami(self, player, nick, args):
