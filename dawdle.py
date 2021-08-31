@@ -2190,11 +2190,11 @@ class DawdleBot(object):
         player = self.randchoice('hog_player', op)
         amount = int(player.nextlvl * (5 + self.randint('hog_amount', 0, 71))/100)
         if self.randomly('hog_effect', 5):
-            self.logchanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {C('name', player.name)} {duration(amount)} toward level {player.level + 1}.")
-            player.nextlvl -= amount
-        else:
             self.logchanmsg(f"Thereupon He stretched out His little finger among them and consumed {C('name', player.name)} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
             player.nextlvl += amount
+        else:
+            self.logchanmsg(f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {C('name', player.name)} {duration(amount)} toward level {player.level + 1}.")
+            player.nextlvl -= amount
         self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
         self._players.write()
 

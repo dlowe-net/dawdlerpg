@@ -479,7 +479,7 @@ class TestHandOfGod(unittest.TestCase):
     def test_forward(self):
         op = [self.bot._players.new_player('a', 'b', 'c')]
         self.bot._overrides = {
-            'hog_effect': True,
+            'hog_effect': False,
             'hog_amount': 10
         }
         self.bot.hand_of_god(op)
@@ -490,7 +490,7 @@ class TestHandOfGod(unittest.TestCase):
     def test_back(self):
         op = [self.bot._players.new_player('a', 'b', 'c')]
         self.bot._overrides = {
-            'hog_effect': False,
+            'hog_effect': True,
             'hog_amount': 10
         }
         self.bot.hand_of_god(op)
