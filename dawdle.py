@@ -1562,7 +1562,7 @@ class DawdleBot(object):
         if not player or not player.isadmin:
             if conf['allowuserinfo']:
                 self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe, "
-                            f"On via server: {self._irc.server}. "
+                            f"On via server: {self._irc._server}. "
                             f"{admin_notice}")
             else:
                 self.notice(nick, "You cannot do 'info'.")
