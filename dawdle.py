@@ -1081,7 +1081,7 @@ class IRCClient:
             return
 
         # Notify bot if another user's nick changed
-        self._bot.nick_changed(self, msg.src, msg.args[0])
+        self._bot.nick_changed(msg.src, msg.args[0])
 
         if msg.src == conf['botnick']:
             # Grab my nick that someone left
@@ -1609,7 +1609,7 @@ class DawdleBot(object):
     def cmd_login(self, player, nick, args):
         """start playing as existing character."""
         if nick not in self._irc._users:
-            self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            self.notice(nick, f"Sorry, you aren't on {conf['botchan']}.")
             return
         if player and self._irc.match_user(player.nick, player.userhost):
             self.notice(nick, f"You are already online as {C('name', player.name)}")
