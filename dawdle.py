@@ -918,7 +918,10 @@ class IRCClient:
                 else:
                     tags[pair[0]] = None
         # Arguments before the trailing argument (after the colon) are space-delimited
-        args = args.rstrip().split(' ')
+        if args == "":
+            args = []
+        else:
+            args = args.rstrip().split(' ')
         # There's nothing special about the trailing argument except it can have spaces.
         if trailing is not None:
             args.append(trailing)

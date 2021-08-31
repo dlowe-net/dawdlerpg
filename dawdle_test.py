@@ -68,6 +68,18 @@ class TestIRCMessage(unittest.TestCase):
         self.assertEqual(msg.line, line)
         self.assertEqual(msg.time, 1627754100)
 
+    def test_one_trailing_arg(self):
+        line = ":foo!bar@example.com NICK :baz"
+        msg = dawdle.IRCClient.parse_message(None, line)
+        self.assertEqual(msg.tags, {})
+        self.assertEqual(msg.src, "foo")
+        self.assertEqual(msg.user, "bar")
+        self.assertEqual(msg.host, "example.com")
+        self.assertEqual(msg.cmd, "NICK")
+        self.assertEqual(msg.args, ["baz"])
+        self.assertEqual(msg.trailing, "baz")
+        self.assertEqual(msg.line, line)
+
     def test_notags(self):
         line = ":nick!example@example.com PART #example :later!"
         msg = dawdle.IRCClient.parse_message(None,line)
