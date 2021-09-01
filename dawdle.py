@@ -693,10 +693,12 @@ class PlayerDB(object):
         self._store.delete(pname)
 
 
-    def from_nick(self, nick):
-        """Find the given online player with the nick."""
+    def from_user(self, user):
+        """Find the given online player with the irc user."""
+        # The "userhost" includes the nick so it's still matching the
+        # nick.
         for p in self._players.values():
-            if p.online and p.nick == nick:
+            if p.online and p.userhost == user.userhost:
                 return p
         return None
 
@@ -1043,14 +1045,14 @@ class IRCClient:
 
     def handle_part(self, msg):
         """PART - bot or user left the channel."""
-        self.remove_user(msg.src)
-        self._bot.nick_parted(msg.src)
+        user = self.remove_user(msg.src)
+        self._bot.nick_parted(user)
 
 
     def handle_kick(self, msg):
         """KICK - user was kicked from the channel."""
-        self.remove_user(msg.args[1])
-        self._bot.nick_kicked(msg.args[1])
+        user = self.remove_user(msg.args[1])
+        self._bot.nick_kicked(user)
 
 
     def handle_mode(self, msg):
@@ -1084,6 +1086,10 @@ class IRCClient:
 
     def handle_nick(self, msg):
         """NICK - bot or user had its nick changed."""
+
+        # Do this first so that the user still matches the player.
+        self._bot.nick_changed(self._users[msg.src], msg.args[0])
+
         self._users[msg.args[0]] = self._users[msg.src]
         self._users[msg.args[0]].nick = msg.args[0]
         del self._users[msg.src]
@@ -1092,9 +1098,6 @@ class IRCClient:
             # Update my nick
             self._nick = msg.args[0]
             return
-
-        # Notify bot if another user's nick changed
-        self._bot.nick_changed(msg.src, msg.args[0])
 
         if msg.src == conf['botnick']:
             # Grab my nick that someone left
@@ -1106,41 +1109,48 @@ class IRCClient:
         if msg.src == conf['botnick']:
             # Grab my nick that someone left
             self.nick(conf['botnick'])
-        self.remove_user(msg.src)
+        user = self.remove_user(msg.src)
         if conf['detectsplits'] and re.match(r'\S+\.\S+ \S+\.\S+', msg.trailing):
             # Don't penalize on netsplit
-            self._bot.netsplit(msg.src)
+            self._bot.netsplit(user)
         elif re.match(r"Read error|Ping timeout", msg.trailing):
-            self._bot.nick_dropped(msg.src)
+            self._bot.nick_dropped(user)
         else:
-            self._bot.nick_quit(msg.src)
+            self._bot.nick_quit(user)
 
 
     def handle_notice(self, msg):
         """NOTICE - Message sent, used to prevent loops in bots."""
-        if msg.args[0] != self._nick and self.user_is_ok(msg):
+        if msg.args[0] != self._nick and msg.src in self._users and self.user_is_ok(msg):
             # we ignore private notices
-            self._bot.channel_notice(msg.src, msg.trailing)
+            self._bot.channel_notice(self._users[msg.src], msg.trailing)
 
 
     def handle_privmsg(self, msg):
         """PRIVMSG - Message sent."""
+        if msg.src not in self._users:
+            # Server messages
+            return
         if msg.args[0] == self._nick:
-            self._bot.private_message(msg.src, msg.trailing)
+            self._bot.private_message(self._users[msg.src], msg.trailing)
         elif self.user_is_ok(msg):
-            self._bot.channel_message(msg.src, msg.trailing)
+            self._bot.channel_message(self._users[msg.src], msg.trailing)
 
 
     def add_user(self, nick, userhost, modes, joined):
+        """Adds channel user with the given properties."""
         self._users[nick] = IRCClient.User(nick, userhost, modes, joined)
 
 
     def remove_user(self, nick):
+        """Remove user with the given nick.  Returns that user."""
+        user = self._users[nick]
         del self._users[nick]
         if len(self._users) == 1 and not self.bot_has_ops():
             # Try to acquire ops by leaving and joining
             self.sendnow(f"PART {conf['botchan']} :Acquiring ops")
             self.sendnow(f"JOIN {conf['botchan']}")
+        return user
 
 
     def user_is_ok(self, msg):
@@ -1423,12 +1433,12 @@ class DawdleBot(object):
             self._gametick_task = None
 
 
-    def private_message(self, src, text):
+    def private_message(self, user, text):
         """Called when private message received."""
         if text == '':
             return
         if self._state != "ready":
-            self.notice(src, "The bot isn't ready yet.")
+            self.notice(user.nick, "The bot isn't ready yet.")
             return
 
         parts = text.split(' ', 1)
@@ -1437,46 +1447,46 @@ class DawdleBot(object):
             args = parts[1]
         else:
             args = ''
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if cmd in DawdleBot.ALLOWPLAYERS:
             if not player:
-                self.notice(src, "You are not logged in.")
+                self.notice(user.nick, "You are not logged in.")
                 return
         elif cmd not in DawdleBot.ALLOWALL:
             if player is None or not player.isadmin:
-                self.notice(src, f"You cannot do '{cmd}'.")
+                self.notice(user.nick, f"You cannot do '{cmd}'.")
                 return
         if hasattr(self, f'cmd_{cmd}'):
-            getattr(self, f'cmd_{cmd}')(player, src, args)
+            getattr(self, f'cmd_{cmd}')(player, user.nick, args)
         else:
-            self.notice(src, f"'{cmd} isn't actually a command.")
+            self.notice(user.nick, f"'{cmd} isn't actually a command.")
 
 
-    def channel_message(self, src, text):
+    def channel_message(self, user, text):
         """Called when channel message received."""
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if player:
             self.penalize(player, "message", text)
 
 
-    def channel_notice(self, src, text):
+    def channel_notice(self, user, text):
         """Called when channel notice received."""
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if player:
             self.penalize(player, "message", text)
 
 
-    def nick_changed(self, old_nick, new_nick):
+    def nick_changed(self, user, new_nick):
         """Called when someone on channel changed nick."""
-        player = self._players.from_nick(old_nick)
+        player = self._players.from_user(user)
         if player:
             player.nick = new_nick
             self.penalize(player, "nick")
 
 
-    def nick_parted(self, src):
+    def nick_parted(self, user):
         """Called when someone left the channel."""
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if player:
             self.penalize(player, "part")
             player.online = False
@@ -1484,23 +1494,23 @@ class DawdleBot(object):
             self._players.write()
 
 
-    def netsplit(self, src):
+    def netsplit(self, user):
         """Called when someone was netsplit."""
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if player:
             player.lastlogin = time.time()
 
 
-    def nick_dropped(self, src):
+    def nick_dropped(self, user):
         """Called when someone was disconnected."""
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if player:
             player.lastlogin = time.time()
 
 
-    def nick_quit(self, src):
+    def nick_quit(self, user):
         """Called when someone quit IRC intentionally."""
-        player = self._players.from_nick(src)
+        player = self._players.from_user(user)
         if player:
             self.penalize(player, "quit")
             player.online = False
@@ -1508,9 +1518,9 @@ class DawdleBot(object):
             self._players.write()
 
 
-    def nick_kicked(self, target):
+    def nick_kicked(self, user):
         """Called when someone was kicked."""
-        player = self._players.from_nick(target)
+        player = self._players.from_user(user)
         if player:
             self.penalize(player, "kick")
             player.online = False
@@ -1807,7 +1817,7 @@ class DawdleBot(object):
         if args == "":
             self.notice(nick, "Try: CONFIG <key search> or CONFIG <key> <value>")
             return
-        
+
         parts = args.split(' ', 2)
         if len(parts) == 1:
             if parts[0] in conf:

@@ -189,15 +189,19 @@ class TestDawdleBot(unittest.TestCase):
         dawdle.conf['pennick'] = 10
         dawdle.conf['penquit'] = 20
         dawdle.conf['rppenstep'] = 1.14
+
         bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
-        bot.connected(FakeIRCClient())
+        irc = FakeIRCClient()
+        bot.connected(irc)
+        irc._users['foo'] = dawdle.IRCClient.User("foo", "foo!foo@example.com", [], 1)
         a = bot._players.new_player('a', 'b', 'c')
         a.online = True
         a.nick = 'foo'
+        a.userhost = 'foo!foo@example.com'
         self.assertEqual('foo', a.nick)
-        bot.nick_changed('foo', 'bar')
+        bot.nick_changed(irc._users['foo'], 'bar')
         self.assertEqual('bar', a.nick)
-        bot.nick_quit('bar')
+        bot.nick_quit(irc._users['foo'])
 
 class TestPlayerDB(unittest.TestCase):
 
@@ -533,19 +537,22 @@ class TestQuest(unittest.TestCase):
 
 
     def test_questing_mode_1(self):
+        users = [dawdle.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
-        for p in op:
+        for u,p in zip(users,op):
             p.online = True
             p.level = 25
             p.lastlogin = now - 36001
+            p.nick = u.nick
+            p.userhost = u.userhost
         self.bot._overrides = {
             "quest_members": op,
             "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
         }
         self.bot.quest_start(now)
-        self.bot.private_message('foo', 'quest')
+        self.bot.private_message(users[0], 'quest')
         # time passes
         self.bot._quest.qtime = now-1
         self.bot.quest_check(now)
@@ -554,7 +561,7 @@ class TestQuest(unittest.TestCase):
             "a, b, c, and d have been chosen by the gods to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu.  Quest to end in 0 days, 12:00:00.",
             "a, b, c, and d have blessed the realm by completing their quest! 25% of their burden is eliminated."
         ])
-        self.assertListEqual(self.irc.notices['foo'], [
+        self.assertListEqual(self.irc.notices['a'], [
             "a, b, c, and d are on a quest to locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu. Quest to complete in 0 days, 11:59:59."
         ])
         self.assertEqual(op[0].nextlvl, 450)
@@ -565,19 +572,22 @@ class TestQuest(unittest.TestCase):
 
     def test_questing_mode_2(self):
         dawdle.conf['mapurl'] = "https://example.com/"
+        users = [dawdle.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
-        for p in op:
+        for u,p in zip(users,op):
             p.online = True
             p.level = 25
             p.lastlogin = now - 36001
+            p.nick = u.nick
+            p.userhost = u.userhost
         self.bot._overrides = {
             "quest_members": op,
             "quest_selection": "2 400 475 480 380 explore and chart the dark lands of T'rnalvph",
         }
         self.bot._players._online = op
         self.bot.quest_start(now)
-        self.bot.private_message('foo', 'quest')
+        self.bot.private_message(users[0], 'quest')
         for p in op:
             p.posx, p.posy = 400, 475
         self.bot.quest_check(1)
@@ -590,7 +600,7 @@ class TestQuest(unittest.TestCase):
             "a, b, c, and d have reached a landmark on their journey! 1 landmark remains.",
             "a, b, c, and d have completed their journey! 25% of their burden is eliminated."
         ])
-        self.assertListEqual(self.irc.notices['foo'], [
+        self.assertListEqual(self.irc.notices['a'], [
             "a, b, c, and d are on a quest to explore and chart the dark lands of T'rnalvph. Participants must first reach (400, 475), then (480, 380). See https://example.com/ to monitor their journey's progress."
         ])
         self.assertEqual(op[0].nextlvl, 450)
@@ -668,11 +678,13 @@ class TestPlayerCommands(unittest.TestCase):
         self.bot.connected(self.irc)
 
     def test_unrestricted_commands_without_player(self):
+        self.irc._server = 'irc.example.com'
         for cmd in dawdle.DawdleBot.ALLOWALL:
             # We don't care what it does, as long as it doesn't crash.
             getattr(self.bot, f"cmd_{cmd}")(None, "foo", "")
 
     def test_cmd_info(self):
+        self.irc._server = 'irc.example.com'
         self.bot.cmd_info(None, "foo", "")
         self.assertIn("DawdleRPG v", self.irc.notices["foo"][0])
         player = self.bot._players.new_player("bar", 'a', 'b')
