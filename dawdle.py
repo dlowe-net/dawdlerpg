@@ -126,7 +126,15 @@ def start_bot():
 
     dawdlelog.log.info("Dawdlebot %s starting.", dawdlebot.VERSION)
 
-    db = dawdlebot.PlayerDB(dawdlebot.IdleRPGPlayerStore(dawdlebot.datapath(dawdleconf.conf["dbfile"])))
+    if dawdleconf.conf["store_format"] == "idlerpg":
+        store = dawdlebot.IdleRPGPlayerStore(dawdlebot.datapath(dawdleconf.conf["dbfile"]))
+    elif dawdleconf.conf["store_format"] == "sqlite3":
+        store = dawdlebot.Sqlite3PlayerStore(dawdlebot.datapath(dawdleconf.conf["dbfile"]))
+    else:
+        sys.stderr.write(f"Invalid configuration store_format={dawdleconf.conf['store_format']}.  Configuration must be idlerpg or sqlite3.")
+        sys.exit(1)
+
+    db = dawdlebot.PlayerDB(store)
     if db.exists():
         db.backup_store()
         db.load()

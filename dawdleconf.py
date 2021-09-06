@@ -36,6 +36,7 @@ def read_config(path):
         "confpath": os.path.realpath(path),
         "datadir": os.path.realpath(os.path.dirname(path)),
         "backupdir": ".dbbackup",
+        "store_format": "idlerpg",
         "daemonize": True,
         "loglevel": "DEBUG",
         "throttle": True,
