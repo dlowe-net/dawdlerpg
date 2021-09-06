@@ -1,0 +1,51 @@
+{% load duration %}
+<html><head>
+    
+  </head><body>
+    <h1>{{player.name}}, the level {{player.level}} {{player.cclass}}</h1>
+    <table><tbody>
+        <tr>
+          <td>Level:</td><td>{{player.level}}</td>
+          <td>Current Position:</td><td>{{player.posx}}, {{player.posy}}</td>
+        </tr>
+        <tr>
+          <td>Account created:</td><td>{{player.created}}</td>
+          <td>Last Login:</td><td>{{player.lastlogin}}</td>
+        </tr>
+        <tr>
+          <td>Total time idled:</td><td>{{player.idled|duration}}</td>
+          <td>Time to next level:</td><td>{{player.nextlvl|duration}}</td>
+        </tr>
+        <tr>
+          <td>Alignment:</td><td>{{player.alignment}}</td>
+        </tr>
+    </tbody></table>
+    <h2>Penalties</h2>
+    <table><tbody>
+        <tr>
+          <td>Being kicked:</td><td>{{player.penkick|duration}}</td>
+          <td>Leaving channel:</td><td>{{player.penpart|duration}}</td>
+        </tr>
+        <tr>
+          <td>Quitting:</td><td>{{player.penquit|duration}}</td>
+          <td>Dropping link:</td><td>{{player.pendropped|duration}}</td>
+        </tr>
+        <tr>
+          <td>Changing nicks:</td><td>{{player.pennick|duration}}</td>
+          <td>Messaging:</td><td>{{player.penmessage|duration}}</td>
+        </tr>
+        <tr>
+          <td>Logout command:</td><td>{{player.penlogout|duration}}</td>
+          <td>Quest failures:</td><td>{{player.penquest|duration}}</td>
+        </tr>
+    </tbody></table>
+    <p>Total penalties: {{total_penalties|duration}}</p>
+    
+    <h2>Items</h2>
+    <ul>
+    {% for item in player.item_set.all|dictsort:"slot" %}
+    <li>{{item.slot}}: Level {{ item.level }} {{item.name}}</li>
+    {% endfor %}
+    </ul>
+    <p>Total item level: {{ total_items }}</p>
+</body></html>
