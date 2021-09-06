@@ -1,18 +1,20 @@
 #!/usr/bin/python3
 
-import dawdle
 import os.path
-import random
-import sys
 import tempfile
 import time
 import unittest
 
+import dawdle
+import dawdleirc
+import dawdlebot
+import dawdleconf
+
 class TestPlayerDBSqlite3(unittest.TestCase):
     def test_db(self):
-        dawdle.conf['rpbase'] = 600
+        dawdleconf.conf['rpbase'] = 600
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = dawdle.PlayerDB(dawdle.Sqlite3PlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
+            db = dawdlebot.PlayerDB(dawdlebot.Sqlite3PlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
             self.assertFalse(db.exists())
             db.create()
             p = db.new_player('foo', 'bar', 'baz')
@@ -26,7 +28,7 @@ class TestPlayerDBSqlite3(unittest.TestCase):
 
     def test_passwords(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = dawdle.PlayerDB(dawdle.Sqlite3PlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
+            db = dawdlebot.PlayerDB(dawdlebot.Sqlite3PlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
             self.assertFalse(db.exists())
             db.create()
             p = db.new_player('foo', 'bar', 'baz')
@@ -40,7 +42,7 @@ class TestPlayerDBSqlite3(unittest.TestCase):
 class TestPlayerDBIdleRPG(unittest.TestCase):
     def test_db(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            db = dawdle.PlayerDB(dawdle.IdleRPGPlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
+            db = dawdlebot.PlayerDB(dawdlebot.IdleRPGPlayerStore(os.path.join(tmpdir, 'dawdle_test.db')))
             db.create()
             op = db.new_player('foo', 'bar', 'baz')
             op.amulet = 55
@@ -57,7 +59,7 @@ class TestPlayerDBIdleRPG(unittest.TestCase):
 class TestIRCMessage(unittest.TestCase):
     def test_basic(self):
         line = "@time=2021-07-31T13:55:00;bar=baz :nick!example@example.com PART #example :later!"
-        msg = dawdle.IRCClient.parse_message(None, line)
+        msg = dawdleirc.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {"time": "2021-07-31T13:55:00", "bar": "baz"})
         self.assertEqual(msg.src, "nick")
         self.assertEqual(msg.user, "example")
@@ -70,7 +72,7 @@ class TestIRCMessage(unittest.TestCase):
 
     def test_one_trailing_arg(self):
         line = ":foo!bar@example.com NICK :baz"
-        msg = dawdle.IRCClient.parse_message(None, line)
+        msg = dawdleirc.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {})
         self.assertEqual(msg.src, "foo")
         self.assertEqual(msg.user, "bar")
@@ -82,7 +84,7 @@ class TestIRCMessage(unittest.TestCase):
 
     def test_complextags(self):
         line = "@keyone=one\\sbig\\:value;keytwo=t\\wo\\rbig\\n\\\\values :nick!example@example.com PART #example :later!"
-        msg = dawdle.IRCClient.parse_message(None, line)
+        msg = dawdleirc.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {
             "keyone": "one big;value",
             "keytwo": "two\rbig\n\\values",
@@ -91,32 +93,32 @@ class TestIRCMessage(unittest.TestCase):
 
     def test_notags(self):
         line = ":nick!example@example.com PART #example :later!"
-        msg = dawdle.IRCClient.parse_message(None,line)
+        msg = dawdleirc.IRCClient.parse_message(None,line)
         self.assertEqual(msg.tags, {})
         self.assertEqual(msg.src, "nick")
 
     def test_badtags(self):
         line = "@asdf :nick!example@example.com PART #example :later!"
-        msg = dawdle.IRCClient.parse_message(None,line)
+        msg = dawdleirc.IRCClient.parse_message(None,line)
         self.assertEqual(msg.tags, {'asdf': None})
         self.assertEqual(msg.src, "nick")
 
         line = "@ :nick!example@example.com PART #example :later!"
-        msg = dawdle.IRCClient.parse_message(None,line)
+        msg = dawdleirc.IRCClient.parse_message(None,line)
         self.assertEqual(msg.tags, {})
         self.assertEqual(msg.src, "nick")
 
     def test_bad_encoding(self):
         line = "\255\035"
-        msg = dawdle.IRCClient.parse_message(None, line)
+        msg = dawdleirc.IRCClient.parse_message(None, line)
 
 
 class TestIRCClient(unittest.TestCase):
 
     def test_handle_cap(self):
-        dawdle.conf['botnick'] = 'foo'
-        irc = dawdle.IRCClient(None)
-        irc.handle_cap(dawdle.IRCClient.Message(tags={}, src='tungsten.libera.chat', user=None, host=None, cmd='CAP', args=['*', 'ACK', 'multi-prefix'], trailing='multi-prefix', line=':tungsten.libera.chat CAP * ACK :multi-prefix', time=1629501206))
+        dawdleconf.conf['botnick'] = 'foo'
+        irc = dawdleirc.IRCClient(None)
+        irc.handle_cap(dawdleirc.IRCClient.Message(tags={}, src='tungsten.libera.chat', user=None, host=None, cmd='CAP', args=['*', 'ACK', 'multi-prefix'], trailing='multi-prefix', line=':tungsten.libera.chat CAP * ACK :multi-prefix', time=1629501206))
         self.assertIn("multi-prefix", irc._caps)
 
 
@@ -139,7 +141,7 @@ class FakeIRCClient(object):
         self.notices.setdefault(nick, []).append(text)
 
 
-class FakePlayerStore(dawdle.PlayerStore):
+class FakePlayerStore(dawdlebot.PlayerStore):
 
     def __init__(self):
         self._mem = {}
@@ -170,11 +172,11 @@ class FakePlayerStore(dawdle.PlayerStore):
 class TestIRCClient(unittest.TestCase):
 
     def test_nick_change(self):
-        dawdle.conf['botnick'] = 'dawdlerpg'
-        bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
-        irc = dawdle.IRCClient(bot)
-        irc.handle_join(dawdle.IRCClient.Message(tags={}, src='foo', user=None, host=None, cmd='NICK', args=['#dawdlerpg'], trailing='', line='', time=0))
-        irc.handle_nick(dawdle.IRCClient.Message(tags={}, src='foo', user=None, host=None, cmd='NICK', args=['bar'], trailing='bar', line='', time=0))
+        dawdleconf.conf['botnick'] = 'dawdlerpg'
+        bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
+        irc = dawdleirc.IRCClient(bot)
+        irc.handle_join(dawdleirc.IRCClient.Message(tags={}, src='foo', user=None, host=None, cmd='NICK', args=['#dawdlerpg'], trailing='', line='', time=0))
+        irc.handle_nick(dawdleirc.IRCClient.Message(tags={}, src='foo', user=None, host=None, cmd='NICK', args=['bar'], trailing='bar', line='', time=0))
         self.assertNotIn('foo', irc._users)
         self.assertIn('bar', irc._users)
 
@@ -182,18 +184,18 @@ class TestIRCClient(unittest.TestCase):
 class TestDawdleBot(unittest.TestCase):
 
     def test_nick_change(self):
-        dawdle.conf['botnick'] = 'dawdlerpg'
-        dawdle.conf['botchan'] = '#dawdlerpg'
-        dawdle.conf['message_wrap_len'] = 400
-        dawdle.conf['throttle'] = False
-        dawdle.conf['pennick'] = 10
-        dawdle.conf['penquit'] = 20
-        dawdle.conf['rppenstep'] = 1.14
+        dawdleconf.conf['botnick'] = 'dawdlerpg'
+        dawdleconf.conf['botchan'] = '#dawdlerpg'
+        dawdleconf.conf['message_wrap_len'] = 400
+        dawdleconf.conf['throttle'] = False
+        dawdleconf.conf['pennick'] = 10
+        dawdleconf.conf['penquit'] = 20
+        dawdleconf.conf['rppenstep'] = 1.14
 
-        bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         irc = FakeIRCClient()
         bot.connected(irc)
-        irc._users['foo'] = dawdle.IRCClient.User("foo", "foo!foo@example.com", [], 1)
+        irc._users['foo'] = dawdleirc.IRCClient.User("foo", "foo!foo@example.com", [], 1)
         a = bot._players.new_player('a', 'b', 'c')
         a.online = True
         a.nick = 'foo'
@@ -206,7 +208,7 @@ class TestDawdleBot(unittest.TestCase):
 class TestPlayerDB(unittest.TestCase):
 
     def test_top_players(self):
-        db = dawdle.PlayerDB(FakePlayerStore())
+        db = dawdlebot.PlayerDB(FakePlayerStore())
         a = db.new_player('a', 'waffle', 'c')
         a.level, a.nextlvl = 30, 100
         b = db.new_player('b', 'doughnut', 'c')
@@ -220,10 +222,10 @@ class TestPvPBattle(unittest.TestCase):
 
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
@@ -249,7 +251,7 @@ class TestPvPBattle(unittest.TestCase):
 
 
     def test_player_battle_bot(self):
-        dawdle.conf['botnick'] = 'dawdlerpg'
+        dawdleconf.conf['botnick'] = 'dawdlerpg'
         a = self.bot._players.new_player('a', 'b', 'c')
         a.amulet = 20
         self.bot._overrides = {
@@ -369,10 +371,10 @@ class TestTeamBattle(unittest.TestCase):
 
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
@@ -420,10 +422,10 @@ class TestEvilness(unittest.TestCase):
 
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
@@ -456,10 +458,10 @@ class TestGoodness(unittest.TestCase):
 
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['modsfile'] = '/tmp/modsfile.txt'
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['modsfile'] = '/tmp/modsfile.txt'
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
@@ -486,9 +488,9 @@ class TestHandOfGod(unittest.TestCase):
 
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
@@ -519,17 +521,17 @@ class TestQuest(unittest.TestCase):
 
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['datadir'] = os.path.join(os.path.dirname(__file__), "data")
-        dawdle.conf['eventsfile'] = "events.txt"
-        dawdle.conf['writequestfile'] = True
-        dawdle.conf['questfilename'] = "/tmp/testquestfile.txt"
-        dawdle.conf['quest_interval_min'] = 6*3600
-        dawdle.conf['quest_min_level'] = 24
-        dawdle.conf['penquest'] = 15
-        dawdle.conf['penlogout'] = 20
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['datadir'] = os.path.join(os.path.dirname(__file__), "data")
+        dawdleconf.conf['eventsfile'] = "events.txt"
+        dawdleconf.conf['writequestfile'] = True
+        dawdleconf.conf['questfilename'] = "/tmp/testquestfile.txt"
+        dawdleconf.conf['quest_interval_min'] = 6*3600
+        dawdleconf.conf['quest_min_level'] = 24
+        dawdleconf.conf['penquest'] = 15
+        dawdleconf.conf['penlogout'] = 20
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
         self.bot._state = "ready"
@@ -537,7 +539,7 @@ class TestQuest(unittest.TestCase):
 
 
     def test_questing_mode_1(self):
-        users = [dawdle.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
+        users = [dawdleirc.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
         for u,p in zip(users,op):
@@ -571,8 +573,8 @@ class TestQuest(unittest.TestCase):
 
 
     def test_questing_mode_2(self):
-        dawdle.conf['mapurl'] = "https://example.com/"
-        users = [dawdle.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
+        dawdleconf.conf['mapurl'] = "https://example.com/"
+        users = [dawdleirc.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
         for u,p in zip(users,op):
@@ -610,7 +612,7 @@ class TestQuest(unittest.TestCase):
 
 
     def test_questing_failure(self):
-        dawdle.conf['rppenstep'] = 1.14
+        dawdleconf.conf['rppenstep'] = 1.14
         op = [self.bot._players.new_player(pname, 'a', 'b') for pname in "abcd"]
         now = time.time()
         for p in op:
@@ -640,9 +642,9 @@ class TestQuest(unittest.TestCase):
 class TestAdminCommands(unittest.TestCase):
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
@@ -667,19 +669,19 @@ class TestAdminCommands(unittest.TestCase):
 class TestPlayerCommands(unittest.TestCase):
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['color'] = False
-        dawdle.conf['allowuserinfo'] = True
-        dawdle.conf['helpurl'] = "http://example.com/"
-        dawdle.conf['botchan'] = "#dawdlerpg"
-        dawdle.conf["voiceonlogin"] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['color'] = False
+        dawdleconf.conf['allowuserinfo'] = True
+        dawdleconf.conf['helpurl'] = "http://example.com/"
+        dawdleconf.conf['botchan'] = "#dawdlerpg"
+        dawdleconf.conf["voiceonlogin"] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
     def test_unrestricted_commands_without_player(self):
         self.irc._server = 'irc.example.com'
-        for cmd in dawdle.DawdleBot.ALLOWALL:
+        for cmd in dawdlebot.DawdleBot.ALLOWALL:
             # We don't care what it does, as long as it doesn't crash.
             getattr(self.bot, f"cmd_{cmd}")(None, "foo", "")
 
@@ -694,7 +696,7 @@ class TestPlayerCommands(unittest.TestCase):
     def test_cmd_login(self):
 
         self.bot.cmd_login(None, "foo", "bar baz")
-        self.irc._users['foo'] = dawdle.IRCClient.User("foo", "foo@example.com", [], 1)
+        self.irc._users['foo'] = dawdleirc.IRCClient.User("foo", "foo@example.com", [], 1)
         self.assertEqual("Sorry, you aren't on #dawdlerpg.", self.irc.notices["foo"][0])
         self.irc.resetmsgs()
         player = self.bot._players.new_player("bar", 'a', 'b')
@@ -706,20 +708,20 @@ class TestPlayerCommands(unittest.TestCase):
 class TestGameTick(unittest.TestCase):
 
     def setUp(self):
-        dawdle.conf['rpbase'] = 600
-        dawdle.conf['rpstep'] = 1.14
-        dawdle.conf['detectsplits'] = True
-        dawdle.conf['splitwait'] = 300
-        dawdle.conf['datadir'] = os.path.join(os.path.dirname(__file__), "data")
-        dawdle.conf['eventsfile'] = "events.txt"
-        dawdle.conf['writequestfile'] = True
-        dawdle.conf['questfilename'] = "/tmp/testquestfile.txt"
-        dawdle.conf['quest_min_level'] = 24
-        dawdle.conf['self_clock'] = 1
-        dawdle.conf['mapx'] = 500
-        dawdle.conf['mapy'] = 500
-        dawdle.conf['color'] = False
-        self.bot = dawdle.DawdleBot(dawdle.PlayerDB(FakePlayerStore()))
+        dawdleconf.conf['rpbase'] = 600
+        dawdleconf.conf['rpstep'] = 1.14
+        dawdleconf.conf['detectsplits'] = True
+        dawdleconf.conf['splitwait'] = 300
+        dawdleconf.conf['datadir'] = os.path.join(os.path.dirname(__file__), "data")
+        dawdleconf.conf['eventsfile'] = "events.txt"
+        dawdleconf.conf['writequestfile'] = True
+        dawdleconf.conf['questfilename'] = "/tmp/testquestfile.txt"
+        dawdleconf.conf['quest_min_level'] = 24
+        dawdleconf.conf['self_clock'] = 1
+        dawdleconf.conf['mapx'] = 500
+        dawdleconf.conf['mapy'] = 500
+        dawdleconf.conf['color'] = False
+        self.bot = dawdlebot.DawdleBot(dawdlebot.PlayerDB(FakePlayerStore()))
         self.irc = FakeIRCClient()
         self.bot.connected(self.irc)
 
