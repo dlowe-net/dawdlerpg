@@ -1565,9 +1565,9 @@ class DawdleBot(object):
                 player.level += 1
                 if player.level > 60:
                     # linear after level 60
-                    player.nextlvl = int(conf['rpbase'] * (conf['rpstep'] ** 60 + (86400 * (player.level - 60))))
+                    player.nextlvl = int(conf['rpbase'] * conf['rpstep'] ** 60) + (86400 * (player.level - 60))
                 else:
-                    player.nextlvl = int(conf['rpbase'] * (conf['rpstep'] ** player.level))
+                    player.nextlvl = int(conf['rpbase'] * conf['rpstep'] ** player.level)
 
                 self.chanmsg(f"{C('name', player.name)}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
