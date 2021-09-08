@@ -6,8 +6,8 @@ import re
 import textwrap
 import time
 
-from dawdleconf import conf
-from dawdlelog import log
+from dawdle.conf import conf
+from dawdle.log import log
 
 def grouper(iterable, n):
     """Collect data into fixed-length chunks or blocks

@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 # Copyright 2021 Daniel Lowe
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,9 +27,9 @@ import time
 
 from hmac import compare_digest as compare_hash
 
-from dawdleconf import conf
-from dawdlelog import log
-import dawdleconf
+from dawdle.conf import conf
+from dawdle.log import log
+import dawdle.conf as dawdleconf
 
 VERSION = "1.0.0"
 

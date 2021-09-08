@@ -1,7 +1,8 @@
 import argparse
 import os.path
 import re
-import dawdlelog
+
+import dawdle.log
 
 DURATION_RE = re.compile(r"(\d+)([dhms])")
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
