@@ -35,11 +35,11 @@ def first_setup(db):
     """Perform initialization of game."""
     if db.exists():
         return
-    pname = input(f"{bot.datapath(conf.conf['dbfile'])} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf.conf['owner']}]: ")
+    pname = input(f"{bot.datapath(conf.get('dbfile'))} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf.get('owner')}]: ")
     if pname == "":
-        pname = conf.conf["owner"]
+        pname = conf.get("owner")
     pclass = input("Enter a character class for this account: ")
-    pclass = pclass[:conf.conf["max_class_len"]]
+    pclass = pclass[:conf.get("max_class_len")]
     try:
         old = termios.tcgetattr(sys.stdin.fileno())
         new = old.copy()
@@ -54,7 +54,7 @@ def first_setup(db):
     p.isadmin = True
     db.write()
 
-    print(f"OK, wrote you into {conf.datapath(conf.conf['dbfile'])}")
+    print(f"OK, wrote you into {conf.datapath(conf.get('dbfile'))}")
 
 
 def check_pidfile(pidfile):
@@ -103,11 +103,11 @@ def daemonize():
 async def mainloop(client):
     """Connect to servers repeatedly."""
     while not client.quitting:
-        addr, port = conf.conf['servers'][0].split(':')
+        addr, port = conf.get("servers")[0].split(':')
         await client.connect(addr, port)
-        if not conf.conf['reconnect']:
+        if not conf.get("reconnect"):
             break
-        await asyncio.sleep(conf.conf['reconnect_wait'])
+        await asyncio.sleep(conf.get("reconnect_wait"))
 
 
 def start_bot():
@@ -115,24 +115,22 @@ def start_bot():
     conf.init()
 
     # debug mode turns off daemonization, sets log level to debug, and logs to stderr
-    if conf.conf["debug"]:
-        conf.conf["daemonize"] = False
-        conf.conf["loglevel"] = logging.DEBUG
+    if conf.get("debug"):
         dawdlelog.log_to_stderr()
 
-    dawdlelog.init(conf.conf["loglevel"])
+    dawdlelog.init(conf.get("loglevel"))
 
-    if "logfile" in conf.conf:
-        dawdlelog.log_to_file(conf.conf["loglevel"], conf.conf["logfile"])
+    if conf.has("logfile"):
+        dawdlelog.log_to_file(conf.get("loglevel"), conf.get("logfile"))
 
     log.info("Bot %s starting.", bot.VERSION)
 
-    if conf.conf["store_format"] == "idlerpg":
-        store = bot.IdleRPGGameStorage(bot.datapath(conf.conf["dbfile"]))
-    elif conf.conf["store_format"] == "sqlite3":
-        store = bot.Sqlite3GameStorage(bot.datapath(conf.conf["dbfile"]))
+    if conf.get("store_format") == "idlerpg":
+        store = bot.IdleRPGGameStorage(bot.datapath(conf.get("dbfile")))
+    elif conf.get("store_format") == "sqlite3":
+        store = bot.Sqlite3GameStorage(bot.datapath(conf.get("dbfile")))
     else:
-        sys.stderr.write(f"Invalid configuration store_format={conf.conf['store_format']}.  Configuration must be idlerpg or sqlite3.")
+        sys.stderr.write(f"Invalid configuration store_format={conf.get('store_format')}.  Configuration must be idlerpg or sqlite3.")
         sys.exit(1)
 
     db = bot.GameDB(store)
@@ -142,16 +140,16 @@ def start_bot():
     else:
         first_setup(db)
 
-    if 'pidfile' in conf.conf:
-        check_pidfile(bot.datapath(conf.conf['pidfile']))
+    if conf.has("pidfile"):
+        check_pidfile(bot.datapath(conf.get("pidfile")))
 
-    if conf.conf['daemonize']:
+    if conf.get("daemonize"):
         daemonize()
 
-    if 'pidfile' in conf.conf:
-        with open(bot.datapath(conf.conf['pidfile']), "w") as ouf:
+    if conf.has("pidfile"):
+        with open(bot.datapath(conf.get("pidfile")), "w") as ouf:
             ouf.write(f"{os.getpid()}\n")
-        atexit.register(os.remove, bot.datapath(conf.conf['pidfile']))
+        atexit.register(os.remove, bot.datapath(conf.get("pidfile")))
 
     mybot = bot.DawdleBot(db)
     client = irc.IRCClient(mybot)

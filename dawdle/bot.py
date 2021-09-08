@@ -27,9 +27,8 @@ import time
 
 from hmac import compare_digest as compare_hash
 
-from dawdle.conf import conf
+from dawdle import conf
 from dawdle.log import log
-import dawdle.conf as dawdleconf
 
 VERSION = "1.0.0"
 
@@ -55,12 +54,12 @@ def datapath(path):
     """Return path relative to datadir unless path is absolute."""
     if os.path.isabs(path):
         return path
-    return os.path.join(conf["datadir"], path)
+    return os.path.join(conf.get("datadir"), path)
 
 
 def CC(color):
     """Return color code if colors are enabled."""
-    if "color" not in conf or not conf["color"]:
+    if not conf.get("color"):
         return ""
     colors = {"white": 0, "black": 1, "navy": 2, "green": 3, "red": 4, "maroon": 5, "purple": 6, "olive": 7, "yellow": 8, "lgreen": 9, "teal": 10, "cyan": 11, "blue": 12, "magenta": 13, "gray": 14, "lgray": 15, "default": 99}
     if color not in colors:
@@ -75,12 +74,12 @@ def C(field='', text=''):
     If text is not specified, returns just the color code.
     If field is not specified, returns just a formatting reset.
     """
-    if "color" not in conf or not conf["color"]:
+    if not conf.get("color"):
         return text
     if field == "":
         return "\x0f"
     conf_field = f"{field}color"
-    if conf_field not in conf:
+    if not conf.has(conf_field):
         return f"[{conf_field}?]" + text
     if text == "":
         return CC(conf[conf_field])
@@ -221,9 +220,9 @@ class Player(object):
         """
         sum = self.itemsum()
         if self.alignment == 'e':
-            return int(sum * conf["evil_battle_pct"]/100)
+            return int(sum * conf.get("evil_battle_pct")/100)
         if self.alignment == 'g':
-            return int(sum * conf["good_battle_pct"]/100)
+            return int(sum * conf.get("good_battle_pct")/100)
         return sum
 
 
@@ -326,9 +325,9 @@ class IdleRPGGameStorage(GameStorage):
 
     def backup(self):
         """Backs up database to a directory."""
-        os.makedirs(datapath(conf["backupdir"]), exist_ok=True)
-        backup_path = os.path.join(datapath(conf["backupdir"]),
-                                   f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{os.path.basename(conf['dbfile'])}")
+        os.makedirs(datapath(conf.get("backupdir")), exist_ok=True)
+        backup_path = os.path.join(datapath(conf.get("backupdir")),
+                                   f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{os.path.basename(conf.get('dbfile'))}")
         shutil.copyfile(self._dbpath, backup_path)
 
 
@@ -441,15 +440,15 @@ class IdleRPGGameStorage(GameStorage):
         then grepped for by the website.
 
         """
-        with open(datapath(conf['modsfile']), "a") as ouf:
+        with open(datapath(conf.get("modsfile")), "a") as ouf:
             ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
 
 
     def update_quest(self, quest):
         """Updates quest information in store."""
-        if not conf['writequestfile']:
+        if not conf.get("writequestfile"):
             return
-        with open(datapath(conf['questfilename']), 'w') as ouf:
+        with open(datapath(conf.get("questfilename")), 'w') as ouf:
             if not quest:
                 # leave behind an empty quest file
                 return
@@ -514,10 +513,10 @@ class Sqlite3GameStorage(GameStorage):
 
     def backup(self):
         """Backs up database to a directory."""
-        os.makedirs(datapath(conf["backupdir"]), exist_ok=True)
+        os.makedirs(datapath(conf.get("backupdir")), exist_ok=True)
         with self._connect() as con:
-            backup_path = os.path.join(datapath(conf["backupdir"]),
-                                       f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{os.path.basename(conf['dbfile'])}")
+            backup_path = os.path.join(datapath(conf.get("backupdir")),
+                                       f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{os.path.basename(conf.get('dbfile'))}")
             backup_db = sqlite3.connect(backup_path)
             with backup_db:
                 self._db.backup(backup_db)
@@ -665,7 +664,7 @@ class GameDB(object):
         if pname in self._players:
             raise KeyError
 
-        p = Player.new_player(pname, pclass, ppass, conf['rpbase'])
+        p = Player.new_player(pname, pclass, ppass, conf.get("rpbase"))
         self._players[pname] = p
         self._store.new(p)
 
@@ -894,13 +893,13 @@ class DawdleBot(object):
             self.chanmsg("0 users qualified for auto login.")
         self._gametick_task = asyncio.create_task(self.gametick_loop())
         self._qtimer = time.time() + self.randint('qtimer_init',
-                                                  conf["quest_interval_min"],
-                                                  conf["quest_interval_max"])
+                                                  conf.get("quest_interval_min"),
+                                                  conf.get("quest_interval_max"))
 
 
     def acquired_ops(self):
         """Called when the bot has acquired ops status on the channel."""
-        if not conf['voiceonlogin'] or self._state != 'ready':
+        if not conf.get("voiceonlogin") or self._state != 'ready':
             return
 
         online_nicks = set([p.nick for p in self._db.online_players()])
@@ -1043,13 +1042,13 @@ class DawdleBot(object):
             return
         if not player:
             self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWALL)}")
-            self.notice(nick, f"For more information, see {conf['helpurl']}.")
+            self.notice(nick, f"For more information, see {conf.get('helpurl')}.")
         elif not player.isadmin:
             self.notice(nick, f"Available commands: {','.join(DawdleBot.ALLOWALL + DawdleBot.ALLOWPLAYERS)}")
-            self.notice(nick, f"For more information, see {conf['helpurl']}.")
+            self.notice(nick, f"For more information, see {conf.get('helpurl')}.")
         else:
             self.notice(nick, f"Available commands: {','.join(sorted(DawdleBot.CMDHELP.keys()))}")
-            self.notice(nick, f"Player help is at {conf['helpurl']} ; admin help is at {conf['admincommurl']}")
+            self.notice(nick, f"Player help is at {conf.get('helpurl')} ; admin help is at {conf.get('admincommurl')}")
 
 
     def cmd_version(self, player, nick, args):
@@ -1065,7 +1064,7 @@ class DawdleBot(object):
         else:
             admin_notice = "No admins online."
         if not player or not player.isadmin:
-            if conf['allowuserinfo']:
+            if conf.get("allowuserinfo"):
                 self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe, "
                             f"On via server: {self._irc._server}. "
                             f"{admin_notice}")
@@ -1105,7 +1104,7 @@ class DawdleBot(object):
 
     def cmd_status(self, player, nick, args):
         """get status on player."""
-        if not conf['statuscmd']:
+        if not conf.get("statuscmd"):
             self.notice(nick, "You cannot do 'status'.")
             return
         if args == '':
@@ -1126,7 +1125,7 @@ class DawdleBot(object):
     def cmd_login(self, player, nick, args):
         """start playing as existing character."""
         if nick not in self._irc._users:
-            self.notice(nick, f"Sorry, you aren't on {conf['botchan']}.")
+            self.notice(nick, f"Sorry, you aren't on {conf.get('botchan')}.")
             return
         if player and self._irc.match_user(player.nick, player.userhost):
             self.notice(nick, f"You are already online as {C('name', player.name)}")
@@ -1144,7 +1143,7 @@ class DawdleBot(object):
             self.notice(nick, f"Wrong password.")
             return
         # Success!
-        if conf['voiceonlogin'] and self._irc.bot_has_ops():
+        if conf.get("voiceonlogin") and self._irc.bot_has_ops():
             self._irc.grant_voice(nick)
         p = self._db[pname]
         p.userhost = self._irc._users[nick].userhost
@@ -1167,7 +1166,7 @@ class DawdleBot(object):
             self.notice(nick, f"Sorry, you are already online as {C('name', player.name)}")
             return
         if nick not in self._irc._users:
-            self.notice(nick, f"Sorry, you aren't on {conf['botchan']}")
+            self.notice(nick, f"Sorry, you aren't on {conf.get('botchan')}")
             return
         if self._pause:
             self.notice(nick,
@@ -1189,12 +1188,12 @@ class DawdleBot(object):
         pname, ppass, pclass = parts
         if pname in self._db:
             self.notice(nick, "Sorry, that character name is already in use.")
-        elif pname == self._irc._nick or pname == conf['botnick']:
+        elif pname == self._irc._nick or pname == conf.get("botnick"):
             self.notice(nick, "That character name cannot be registered.")
-        elif len(parts[1]) < 1 or len(pname) > conf["max_name_len"]:
-            self.notice(nick, f"Sorry, character names must be between 1 and {conf['max_name_len']} characters long.")
-        elif len(parts[1]) < 1 or len(pclass) > conf["max_class_len"]:
-            self.notice(nick, f"Sorry, character classes must be between 1 and {conf['max_class_len']} characters long.")
+        elif len(parts[1]) < 1 or len(pname) > conf.get("max_name_len"):
+            self.notice(nick, f"Sorry, character names must be between 1 and {conf.get('max_name_len')} characters long.")
+        elif len(parts[1]) < 1 or len(pclass) > conf.get("max_class_len"):
+            self.notice(nick, f"Sorry, character classes must be between 1 and {conf.get('max_class_len')} characters long.")
         elif pname[0] == "#":
             self.notice(nick, "Sorry, character names may not start with #.")
         elif not pname.isprintable():
@@ -1206,7 +1205,7 @@ class DawdleBot(object):
             player.online = True
             player.nick = nick
             player.userhost = self._irc._users[nick].userhost
-            if conf['voiceonlogin'] and self._irc.bot_has_ops():
+            if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.grant_voice(nick)
             self.chanmsg(f"Welcome {nick}'s new player {C('name', pname)}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
             self.notice(nick, f"Success! Account {C('name', pname)} created. You have {duration(player.nextlvl)} seconds of idleness until you reach level 1.")
@@ -1224,7 +1223,7 @@ class DawdleBot(object):
             self.notice(nick, f"Account {C('name', player.name)} removed.")
             self.chanmsg(f"{nick} removed their account. {C('name', player.name)}, the level {player.level} {player.cclass} is no more.")
             self._db.delete_player(player.name)
-            if conf['voiceonlogin'] and self._irc.bot_has_ops():
+            if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.revoke_voice(nick)
 
 
@@ -1247,14 +1246,14 @@ class DawdleBot(object):
         player.online = False
         player.lastlogin = time.time()
         self._db.write_players()
-        if conf['voiceonlogin'] and self._irc.bot_has_ops():
+        if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.revoke_voice(nick)
         self.penalize(player, "logout")
 
 
     def cmd_backup(self, player, nick, args):
         """copy database file to a backup directory."""
-        self._player.backup_store()
+        self._db.backup_store()
         self.notice(nick, "Player database backed up.")
 
 
@@ -1265,8 +1264,8 @@ class DawdleBot(object):
             self.notice(nick, "Try: CHCLASS <account> <new class>")
         elif parts[0] not in self._db:
             self.notice(nick, f"{parts[0]} is not a valid account.")
-        elif len(parts[1]) < 1 or len(parts[1]) > conf["max_class_len"]:
-            self.notice(nick, f"Character classes must be between 1 and {conf['max_class_len']} characters long.")
+        elif len(parts[1]) < 1 or len(parts[1]) > conf.get("max_class_len"):
+            self.notice(nick, f"Character classes must be between 1 and {conf.get('max_class_len')} characters long.")
         elif not parts[1].isprintable():
             self.notice(nick, "Character classes may not include control codes.")
         else:
@@ -1295,8 +1294,8 @@ class DawdleBot(object):
             self.notice(nick, f"{parts[0]} is not a valid account.")
         elif parts[1] in self._db:
             self.notice(nick, f"{parts[1]} is already taken.")
-        elif len(parts[1]) < 1 or len(parts[1]) > conf["max_name_len"]:
-            self.notice(nick, f"Character names must be between 1 and {conf['max_name_len']} characters long.")
+        elif len(parts[1]) < 1 or len(parts[1]) > conf.get("max_name_len"):
+            self.notice(nick, f"Character names must be between 1 and {conf.get('max_name_len')} characters long.")
         elif parts[1][0] == "#":
             self.notice(nick, "Character names may not start with a #.")
         elif not parts[1].isprintable():
@@ -1314,16 +1313,16 @@ class DawdleBot(object):
 
         parts = args.split(' ', 2)
         if len(parts) == 1:
-            if parts[0] in conf:
-                self.notice(nick, f"{parts[0]} {conf[parts[0]]}")
+            if conf.has(parts[0]):
+                self.notice(nick, f"{parts[0]} {conf.get(parts[0])}")
             else:
-                self.notice(nick, f"Matching config keys: {', '.join([k for k in conf if parts[0] in k])}")
+                self.notice(nick, f"Matching config keys: {', '.join([k for k in conf._conf if parts[0] in k])}")
             return
-        if parts[0] not in conf:
+        if not conf.has(parts[0]):
             self.notice(nick, f"{parts[0]} is not a config key.")
             return
-        val = dawdleconf.parse_val(parts[1])
-        conf[parts[0]] = val
+        val = conf.parse_val(parts[1])
+        conf._conf[parts[0]] = val
         self.notice(nick, f"{parts[0]} set to {val}.")
 
 
@@ -1348,7 +1347,7 @@ class DawdleBot(object):
             self.notice(nick, f"{args} is not a valid account.")
         elif not self._db[args].isadmin:
             self.notice(nick, f"{args} is already not an admin.")
-        elif args == conf['owner']:
+        elif args == conf.get("owner"):
             self.notice(nick, f"You can't do that.")
         else:
             self._db[args].isadmin = False
@@ -1409,7 +1408,7 @@ class DawdleBot(object):
 
     def cmd_rehash(self, player, nick, args):
         """Re-read configuration file."""
-        dawdleconf.read_config(conf["confpath"])
+        conf.read_config(conf.get("confpath"))
         self.notice(nick, "Configuration reloaded.")
 
 
@@ -1510,7 +1509,7 @@ class DawdleBot(object):
             if self._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
-            qp = [p for p in self._db.online_players() if p.level > conf["quest_min_level"]]
+            qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level")]
             if len(qp) < 4:
                 self.notice(nick, "There's not enough eligible players.")
                 return
@@ -1531,8 +1530,8 @@ class DawdleBot(object):
         elif self._quest.mode == 2:
             qp = self._quest.questors
             mapnotice = ''
-            if 'mapurl' in conf:
-                mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
+            if conf.has("mapurl"):
+                mapnotice = f" See {conf.get('mapurl')} to monitor their journey's progress."
             self.notice(nick,
                         f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                         f"are on a quest to {self._quest.text}. Participants must first reach "
@@ -1542,7 +1541,7 @@ class DawdleBot(object):
 
     def penalize(self, player, kind, text=None):
         """Exact penalities on a transgressing player."""
-        penalty = conf["pen"+kind]
+        penalty = conf.get("pen"+kind)
         if penalty == 0:
             return
 
@@ -1553,20 +1552,20 @@ class DawdleBot(object):
                             f"the gods down upon them.  Your great wickedness "
                             f"burdens you like lead, drawing you downwards with "
                             f"great force towards hell. Thereby have you plunged "
-                            f"{conf['penquest']} steps closer to that gaping maw.")
+                            f"{conf.get('penquest')} steps closer to that gaping maw.")
             for p in op:
-                gain = int(conf["penquest"] * (conf['rppenstep'] ** p.level))
+                gain = int(conf.get("penquest") * (conf.get("rppenstep") ** p.level))
                 p.penquest += gain
                 p.nextlvl += gain
 
             self._quest = None
-            self._qtimer = time.time() + conf["quest_interval_min"]
+            self._qtimer = time.time() + conf.get("quest_interval_min")
 
         if text:
             penalty *= len(text)
-        penalty *= int(conf['rppenstep'] ** player.level)
-        if 'limitpen' in conf and penalty > conf['limitpen']:
-            penalty = conf['limitpen']
+        penalty *= int(conf.get("rppenstep") ** player.level)
+        if conf.has("limitpen") and penalty > conf.get("limitpen"):
+            penalty = conf.get("limitpen")
         setattr(player, "pen"+kind, getattr(player, "pen"+kind) + penalty)
         player.nextlvl += penalty
         if kind not in ['dropped', 'quit']:
@@ -1581,11 +1580,11 @@ class DawdleBot(object):
 
     def refresh_events(self):
         """Read events file if it has changed."""
-        if self._events_loaded == os.path.getmtime(datapath(conf['eventsfile'])):
+        if self._events_loaded == os.path.getmtime(datapath(conf.get("eventsfile"))):
             return
 
         self._events = {}
-        with open(datapath(conf['eventsfile'])) as inf:
+        with open(datapath(conf.get("eventsfile"))) as inf:
             for line in inf.readlines():
                 line = line.rstrip()
                 if line != "":
@@ -1594,7 +1593,7 @@ class DawdleBot(object):
 
     def expire_splits(self):
         """Kick players offline if they were disconnected for too long."""
-        expiration = time.time() - conf['splitwait']
+        expiration = time.time() - conf.get("splitwait")
         for p in self._db.online_players():
             if p.nick not in self._irc._users and p.lastlogin < expiration:
                 log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
@@ -1607,7 +1606,7 @@ class DawdleBot(object):
         try:
             last_time = time.time() - 1
             while self._state == 'ready':
-                await asyncio.sleep(conf['self_clock'])
+                await asyncio.sleep(conf.get("self_clock"))
                 now = time.time()
                 self.gametick(int(now), int(now - last_time))
                 last_time = now
@@ -1618,7 +1617,7 @@ class DawdleBot(object):
 
     def gametick(self, now, passed):
         """Main gameplay routine."""
-        if conf['detectsplits']:
+        if conf.get("detectsplits"):
             self.expire_splits()
         self.refresh_events()
 
@@ -1633,7 +1632,7 @@ class DawdleBot(object):
             elif player.alignment == 'g':
                 good_count += 1
 
-        day_ticks = 86400/conf['self_clock']
+        day_ticks = 86400/conf.get("self_clock")
         if self.randint('hog_trigger', 0, 20 * day_ticks) < online_count:
             self.hand_of_god(op)
         if self.randint('team_battle_trigger', 0, 24 * day_ticks) < online_count:
@@ -1679,9 +1678,9 @@ class DawdleBot(object):
                 player.level += 1
                 if player.level > 60:
                     # linear after level 60
-                    player.nextlvl = int(conf['rpbase'] * conf['rpstep'] ** 60) + (86400 * (player.level - 60))
+                    player.nextlvl = int(conf.get("rpbase") * conf.get("rpstep") ** 60) + (86400 * (player.level - 60))
                 else:
-                    player.nextlvl = int(conf['rpbase'] * conf['rpstep'] ** player.level)
+                    player.nextlvl = int(conf.get("rpbase") * conf.get("rpstep") ** player.level)
 
                 self.chanmsg(f"{C('name', player.name)}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
@@ -1767,7 +1766,7 @@ class DawdleBot(object):
     def pvp_battle(self, player, opp, flavor_start, flavor_win, flavor_loss):
         """Enact a powerful player-vs-player battle."""
         if opp is None:
-            oppname = conf['botnick']
+            oppname = conf.get("botnick")
             oppsum = self._db.max_player_power()+1
         else:
             oppname = opp.name
@@ -1991,8 +1990,8 @@ class DawdleBot(object):
         if not op:
             return
         self.randshuffle('move_players_order', op)
-        mapx = conf['mapx']
-        mapy = conf['mapy']
+        mapx = conf.get("mapx")
+        mapy = conf.get("mapy")
         combatants = dict()
         if self._quest and self._quest.mode == 2:
             destx = self._quest.dests[self._quest.stage-1][0]
@@ -2040,7 +2039,7 @@ class DawdleBot(object):
     def quest_start(self, now):
         """Start a random quest with four random players."""
         latest_login_time = now - 36000
-        qp = [p for p in self._db.online_players() if p.level > conf["quest_min_level"] and p.lastlogin < latest_login_time]
+        qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin < latest_login_time]
         if len(qp) < 4:
             return
         qp = self.randsample('quest_members', qp, 4)
@@ -2064,8 +2063,8 @@ class DawdleBot(object):
             self._quest.dests = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
             self._quest.text = match[6]
             mapnotice = ''
-            if 'mapurl' in conf:
-                mapnotice = f" See {conf['mapurl']} to monitor their journey's progress."
+            if conf.has("mapurl"):
+                mapnotice = f" See {conf.get('mapurl')} to monitor their journey's progress."
             self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
                          f"been chosen by the gods to {self._quest.text}.  Participants must first "
                          f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
@@ -2087,7 +2086,7 @@ class DawdleBot(object):
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
                 self._quest = None
-                self._qtimer = now + conf["quest_interval_min"]
+                self._qtimer = now + conf.get("quest_interval_min")
                 self._db.update_quest(self._quest)
         elif self._quest.mode == 2:
             destx = self._quest.dests[self._quest.stage-1][0]
@@ -2113,5 +2112,5 @@ class DawdleBot(object):
                     for q in qp:
                         q.nextlvl = int(q.nextlvl * 0.75)
                     self._quest = None
-                    self._qtimer = now + conf["quest_interval_min"]
+                    self._qtimer = now + conf.get("quest_interval_min")
                 self._db.update_quest(self._quest)

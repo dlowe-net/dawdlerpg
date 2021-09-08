@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os.path
 import re
 
@@ -7,7 +8,8 @@ import dawdle.log
 DURATION_RE = re.compile(r"(\d+)([dhms])")
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
 
-conf = dict()
+_conf = dict()
+
 
 def parse_val(s):
     """Parse values used in the configuration file."""
@@ -29,10 +31,10 @@ def parse_val(s):
 
 def read_config(path):
     """Return dict with contents of configuration file."""
-    global conf
     newconf = {
         "servers": [],
         "okurls": [],
+        "localaddr": None,
         # Non-idlerpg config needs defaults
         "confpath": os.path.realpath(path),
         "datadir": os.path.realpath(os.path.dirname(path)),
@@ -93,13 +95,13 @@ def read_config(path):
 
 
 def init():
-    global conf
+    global _conf
     parser = argparse.ArgumentParser(description="IdleRPG clone")
     parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
     parser.add_argument("config_file", help="Path to configuration file.  You must specify this.")
 
     args = parser.parse_args()
-    conf.update(read_config(args.config_file))
+    _conf.update(read_config(args.config_file))
 
     # override configurations from command line
     server_overrides = []
@@ -114,8 +116,20 @@ def init():
         elif k == "okurl":
             okurl_overrides.append(v)
         else:
-            dawdleconf.conf[k] = parse_val(v)
+            _conf[k] = parse_val(v)
     if server_overrides:
-        dawdleconf.conf["servers"] = server_overrides
+        _conf["servers"] = server_overrides
     if okurl_overrides:
-        dawdleconf.conf["okurls"] = okurl_overrides
+        _conf["okurls"] = okurl_overrides
+
+    # Debug flag turns off daemonization, sets loglevel to debug, and logs to stderr
+    if _conf["debug"]:
+        _conf["daemonize"] = False
+        _conf["loglevel"] = logging.DEBUG
+
+
+def get(key):
+    return _conf[key]
+
+def has(key):
+    return key in _conf
