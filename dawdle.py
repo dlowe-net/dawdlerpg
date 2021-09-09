@@ -105,7 +105,7 @@ async def mainloop(client):
     while not client.quitting:
         addr, port = conf.get("servers")[0].split(':')
         await client.connect(addr, port)
-        if not conf.get("reconnect"):
+        if client.quitting or not conf.get("reconnect"):
             break
         await asyncio.sleep(conf.get("reconnect_wait"))
 
