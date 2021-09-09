@@ -89,6 +89,7 @@ class IRCClient:
                 if self._flushq_task:
                     self._flushq_task.cancel()
                 self._bot.disconnected()
+                await reader.close()
                 break
             self._bytes_received += len(line)
             # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
