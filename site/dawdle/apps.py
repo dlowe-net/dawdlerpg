@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
-class DawdleWebConfig(AppConfig):
-    name = 'dawdleweb'
+class DawdleConfig(AppConfig):
+    name = 'dawdle'
     default_auto_field = 'django.db.models.AutoField'

@@ -42,3 +42,8 @@ class Item(models.Model):
     slot = models.CharField(max_length=10)
     name = models.CharField(max_length=50)
     level = models.IntegerField()
+
+
+class History(models.Model):
+    owner = models.ForeignKey(Player, on_delete=models.CASCADE)
+    event = models.CharField(max_length=400)
