@@ -1,6 +1,6 @@
 {% load duration %}
 <html><head>
-    
+
   </head><body>
     <h1>{{player.name}}, the level {{player.level}} {{player.cclass}}</h1>
     <table><tbody>
@@ -40,7 +40,7 @@
         </tr>
     </tbody></table>
     <p>Total penalties: {{total_penalties|duration}}</p>
-    
+
     <h2>Items</h2>
     <ul>
     {% for item in player.item_set.all|dictsort:"slot" %}
@@ -48,4 +48,12 @@
     {% endfor %}
     </ul>
     <p>Total item level: {{ total_items }}</p>
+
+    <h2>History</h2>
+    <ul>
+    {% for event in player.history_set.all|dictsort:"time" %}
+    <li>{{event.time}}: {{event.text}}</li>
+    {% endfor %}
+    </ul>
+
 </body></html>

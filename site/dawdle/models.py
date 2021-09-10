@@ -1,6 +1,5 @@
 from django.db import models
 
-
 class Player(models.Model):
 
     class AlignmentChoices(models.TextChoices):
@@ -35,9 +34,12 @@ class Player(models.Model):
     penlogout = models.IntegerField(default=0)
     created = models.DateTimeField(auto_now_add=True)
     lastlogin = models.DateTimeField(auto_now_add=True)
-    
+
 
 class Item(models.Model):
+    class Meta:
+        # We use this constraint for the sqlite3 REPLACE command
+        constraints = [models.UniqueConstraint(name="unique_item_owner_slot", fields=["owner", "slot"])]
     owner = models.ForeignKey(Player, on_delete=models.CASCADE)
     slot = models.CharField(max_length=10)
     name = models.CharField(max_length=50)
@@ -46,4 +48,20 @@ class Item(models.Model):
 
 class History(models.Model):
     owner = models.ForeignKey(Player, on_delete=models.CASCADE)
-    event = models.CharField(max_length=400)
+    time = models.DateTimeField(auto_now_add=True)
+    text = models.CharField(max_length=400)
+
+
+class Quest(models.Model):
+    mode = models.IntegerField(default=0)
+    p1 = models.CharField(max_length=50)
+    p2 = models.CharField(max_length=50)
+    p3 = models.CharField(max_length=50)
+    p4 = models.CharField(max_length=50)
+    text = models.CharField(max_length=400)
+    qtime = models.IntegerField(default=0)
+    stage = models.IntegerField(default=0)
+    dest1x = models.IntegerField(default=0)
+    dest1y = models.IntegerField(default=0)
+    dest2x = models.IntegerField(default=0)
+    dest2y = models.IntegerField(default=0)

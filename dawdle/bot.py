@@ -82,16 +82,15 @@ def C(field='', text=''):
     if not conf.has(conf_field):
         return f"[{conf_field}?]" + text
     if text == "":
-        return CC(conf[conf_field])
-    return CC(conf[conf_field]) + text + "\x0f"
+        return CC(conf.get(conf_field))
+    return CC(conf.get(conf_field)) + text + "\x0f"
 
 
-class Player(object):
-    """Represents a player of the dawdlerpg game."""
+class Item(object):
+    """Represents an item held by a player."""
 
-
-    ITEMS = ['ring', 'amulet', 'charm', 'weapon', 'helm', 'tunic', 'gloves', 'leggings', 'shield', 'boots']
-    ITEMDESC = {
+    SLOTS = ['ring', 'amulet', 'charm', 'weapon', 'helm', 'tunic', 'gloves', 'leggings', 'shield', 'boots']
+    DESC = {
         'ring': 'ring',
         'amulet': 'amulet',
         'charm': 'charm',
@@ -103,6 +102,19 @@ class Player(object):
         'leggings': 'set of leggings',
         'boots': 'pair of boots'
     }
+
+
+    def __init__(self, level, name):
+        self.level = level
+        self.name = name
+
+    def __eq__(self, o):
+        return self.level == o.level and self.name == o.name
+
+
+class Player(object):
+    """Represents a player of the dawdlerpg game."""
+
 
     @classmethod
     def from_dict(cls, d):
@@ -163,27 +175,9 @@ class Player(object):
         p.lastlogin = now
         # Character alignment - should only be n, g, or e
         p.alignment = "n"
-        # Items and their names.  Named items are only rarely granted.
-        p.amulet = 0
-        p.amuletname = ''
-        p.charm = 0
-        p.charmname = ''
-        p.helm = 0
-        p.helmname = ''
-        p.boots = 0
-        p.bootsname = ''
-        p.gloves = 0
-        p.glovesname = ''
-        p.ring = 0
-        p.ringname = ''
-        p.leggings = 0
-        p.leggingsname = ''
-        p.shield = 0
-        p.shieldname = ''
-        p.tunic = 0
-        p.tunicname = ''
-        p.weapon = 0
-        p.weaponname = ''
+        # Items held by player
+        p.items = {}
+
         return p
 
 
@@ -192,24 +186,35 @@ class Player(object):
         self.pw = crypt.crypt(ppass, crypt.mksalt())
 
 
-    def acquire_item(self, kind, level, name=''):
+    def item_level(self, slot):
+        if slot not in self.items:
+            return 0
+        return self.items[slot].level
+
+
+    def item_name(self, slot):
+        if slot not in self.items:
+            return ""
+        return self.items[slot].name
+
+
+    def acquire_item(self, slot, level, name=''):
         """Acquire an item."""
-        setattr(self, kind, level)
-        setattr(self, kind+"name", name)
+        self.items[slot] = Item(level, name)
 
 
-    def swap_items(self, o, kind):
-        """Swap items of KIND with the other player O."""
-        namefield = kind+"name"
-        tmpitem = getattr(self, kind)
-        tmpitemname = getattr(self, namefield)
-        self.acquire_item(kind, getattr(o, kind), getattr(o, namefield))
-        o.acquire_item(kind, tmpitem, tmpitemname)
+    def swap_items(self, o, slot):
+        """Swap items of SLOT with the other player O."""
+        self.items[slot], o.items[slot] = o.items.get(slot), self.items.get(slot)
+        if self.items[slot] is None:
+            del self.items[slot]
+        if o.items[slot] is None:
+            del o.items[slot]
 
 
     def itemsum(self):
         """Add up the power of all the player's items"""
-        return sum([getattr(self, item) for item in Player.ITEMS])
+        return sum([item.level for item in self.items.values()])
 
 
     def battleitemsum(self):
@@ -275,7 +280,14 @@ class GameStorage(object):
 
 
 class IdleRPGGameStorage(GameStorage):
-    """Implements a GameStorage compatible with the IdleRPG db."""
+    """Implements a GameStorage compatible with the IdleRPG db.
+
+    Since the IdleRPG db is a tsv file, we can't reasonably update it
+    piecemeal, so the playerbase is cached during reads, and written
+    in its entirety on writes.  The player objects are shared between
+    the cache and the GameDB.
+
+    """
 
     IRPG_FIELDS = ["username", "pass", "is admin", "level", "class", "next ttl", "nick", "userhost", "online", "idled", "x pos", "y pos", "pen_mesg", "pen_nick", "pen_part", "pen_kick", "pen_quit", "pen_quest", "pen_logout", "created", "last login", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"]
     IRPG_FIELD_COUNT = len(IRPG_FIELDS)
@@ -355,16 +367,16 @@ class IdleRPGGameStorage(GameStorage):
             str(p.penlogout),
             str(int(p.created)),
             str(int(p.lastlogin)),
-            self._item_to_code(p.amulet, p.amuletname),
-            self._item_to_code(p.charm, p.charmname),
-            self._item_to_code(p.helm, p.helmname),
-            self._item_to_code(p.boots, p.bootsname),
-            self._item_to_code(p.gloves, p.glovesname),
-            self._item_to_code(p.ring, p.ringname),
-            self._item_to_code(p.leggings, p.leggingsname),
-            self._item_to_code(p.shield, p.shieldname),
-            self._item_to_code(p.tunic, p.tunicname),
-            self._item_to_code(p.weapon, p.weaponname),
+            self._item_to_code(p.item_level("amulet"), p.item_name("amulet")),
+            self._item_to_code(p.item_level("charm"), p.item_name("charm")),
+            self._item_to_code(p.item_level("helm"), p.item_name("helm")),
+            self._item_to_code(p.item_level("boots"), p.item_name("boots")),
+            self._item_to_code(p.item_level("gloves"), p.item_name("gloves")),
+            self._item_to_code(p.item_level("ring"), p.item_name("ring")),
+            self._item_to_code(p.item_level("leggings"), p.item_name("leggings")),
+            self._item_to_code(p.item_level("shield"), p.item_name("shield")),
+            self._item_to_code(p.item_level("tunic"), p.item_name("tunic")),
+            self._item_to_code(p.item_level("weapon"), p.item_name("weapon")),
             str(p.alignment)
         ]) + "\n"
 
@@ -384,8 +396,13 @@ class IdleRPGGameStorage(GameStorage):
                 # This makes a mapping from irpg field to player field.
                 d = dict(zip(["name", "pw", "isadmin", "level", "cclass", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin", "amulet", "charm", "helm", "boots", "gloves", "ring", "leggings", "shield", "tunic", "weapon", "alignment"], parts))
                 # convert items
-                for i in Player.ITEMS:
-                    d[i], d[i+'name'] = self._code_to_item(d[i])
+                items = dict()
+                for i in Item.SLOTS:
+                    level, name = self._code_to_item(d[i])
+                    if level > 0:
+                        items[i] = Item(level, name)
+                    del d[i]
+
                 # convert int fields
                 for f in ["level", "nextlvl", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
                     d[f] = round(float(d[f]))
@@ -395,18 +412,14 @@ class IdleRPGGameStorage(GameStorage):
 
                 d['pendropped'] = 0 # unsupported in saving
 
-                self._cache.append(Player.from_dict(d))
+                p = Player.from_dict(d)
+                p.items = items
+                self._cache.append(p)
         return self._cache
 
 
     def write(self, players):
-        """Writes players to an IdleRPG db.
-
-        Since the IdleRPG db is a tsv file, we can't reasonably update
-        it, so we ignore the argument and write all players.  In order
-        to do this, however, we cache the players we get from reading
-        the file.
-        """
+        """Writes players to an IdleRPG db."""
         with open(self._dbpath, "w") as ouf:
             ouf.write("# " + "\t".join(IdleRPGGameStorage.IRPG_FIELDS) + "\n")
             for p in self._cache:
@@ -471,7 +484,7 @@ class IdleRPGGameStorage(GameStorage):
 class Sqlite3GameStorage(GameStorage):
     """Player store using sqlite3."""
 
-    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment", "amulet", "amuletname", "charm", "charmname", "helm", "helmname", "boots", "bootsname", "gloves", "glovesname", "ring", "ringname", "leggings", "leggingsname", "shield", "shieldname", "tunic", "tunicname", "weapon", "weaponname"]
+    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment"]
 
 
     @staticmethod
@@ -486,7 +499,7 @@ class Sqlite3GameStorage(GameStorage):
     def _connect(self):
         """Connects to the sqlite3 db if not already connected."""
         if self._db is None:
-            self._db = sqlite3.connect(self._dbpath)
+            self._db = sqlite3.connect(datapath(self._dbpath))
             self._db.row_factory = Sqlite3GameStorage.dict_factory
 
         return self._db
@@ -500,10 +513,19 @@ class Sqlite3GameStorage(GameStorage):
     def create(self):
         """Initializes a new db."""
         with self._connect() as cur:
-            cur.execute(f"create table players ({','.join(Sqlite3GameStorage.FIELDS)})")
-            cur.execute("create table history (player, time, text)")
-            cur.execute("create table quest (mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
-            cur.execute("insert into quest (mode) values (0)")
+            cur.execute(f"create table dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)})")
+            cur.execute('create table dawdle_item (owner_id, slot, level, name, CONSTRAINT "unique_item_owner_slot" UNIQUE ("owner_id", "slot"))')
+            cur.execute("create table dawdle_history (player, time, text)")
+            cur.execute("create table dawdle_quest (mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
+            cur.execute("insert into dawdle_quest (mode) values (0)")
+
+
+    def clear(self):
+        """Destroys all data in the db without deleting it."""
+        with self._connect() as cur:
+            cur.execute("delete from dawdle_player")
+            cur.execute("delete from dawdle_history")
+            cur.execute("delete from dawdle_quest")
 
 
     def exists(self):
@@ -525,20 +547,29 @@ class Sqlite3GameStorage(GameStorage):
 
     def readall(self):
         """Reads all the players from the db."""
-        players = []
+        players = {}
         with self._connect() as con:
-            cur = con.execute("select * from players")
+            cur = con.execute("select * from dawdle_player")
             for d in cur.fetchall():
-                players.append(Player.from_dict(d))
-        return players
+                players[d["name"]] = Player.from_dict(d)
+            cur = con.execute("select * from dawdle_item")
+            for d in cur.fetchall():
+                players[d["owner_id"]].items[d["slot"]] = Item(d["level"], d["name"])
+        return players.values()
 
 
     def write(self, players):
         """Writes player information into the db."""
         with self._connect() as cur:
             update_fields = ",".join(f"{k}=:{k}" for k in Sqlite3GameStorage.FIELDS)
-            cur.executemany(f"update players set {update_fields} where name=:name",
+            cur.executemany(f"update dawdle_player set {update_fields} where name=:name",
                             [vars(p) for p in players])
+            item_updates = []
+            for p in players:
+                for slot, item in p.items.items():
+                    item_updates.append((p.name, slot, item.level, item.name))
+            cur.executemany("replace into dawdle_item (owner_id, slot, level, name) values (:owner, :slot, :level, :name)",
+                            item_updates)
 
 
     def close(self):
@@ -550,7 +581,7 @@ class Sqlite3GameStorage(GameStorage):
         """Create new character in db."""
         with self._connect() as cur:
             d = vars(p)
-            cur.execute(f"insert into players values ({('?, ' * len(d))[:-2]})",
+            cur.execute(f"insert into dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)}) values ({('?, ' * len(Sqlite3GameStorage.FIELDS))[:-2]})",
                         [d[k] for k in Sqlite3GameStorage.FIELDS])
             cur.commit()
 
@@ -558,14 +589,14 @@ class Sqlite3GameStorage(GameStorage):
     def rename_player(self):
         """Rename player in db."""
         with self._connect() as cur:
-            cur.execute("update players set name = ? where name = ?", (new_name, old_name))
+            cur.execute("update dawdle_player set name = ? where name = ?", (new_name, old_name))
             cur.commit()
 
 
     def delete_player(self):
         """Remove player from db."""
         with self._connect() as cur:
-            cur.execute("delete from players where name = ?", (pname,))
+            cur.execute("delete from dawdle_player where name = ?", (pname,))
             cur.commit()
 
 
@@ -573,7 +604,7 @@ class Sqlite3GameStorage(GameStorage):
         """Adds history text for the player."""
         with self._connect() as cur:
             for p in players:
-                cur.execute("insert into history values (?, datetime('now'), ?)", (p.name, text))
+                cur.execute("insert into dawdle_history (owner_id, time, text) values (?, datetime('now'), ?)", (p.name, text))
             cur.commit()
 
 
@@ -581,11 +612,11 @@ class Sqlite3GameStorage(GameStorage):
         """Updates quest information in store."""
         with self._connect() as cur:
             if not quest:
-                cur.execute("update quest set mode = 0")
+                cur.execute("update dawdle_quest set mode = 0")
                 cur.commit()
                 return
             if quest.mode == 1:
-                cur.execute("update quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, qtime=?",
+                cur.execute("update dawdle_quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, qtime=?",
                             (quest.mode,
                              quest.text,
                              quest.questors[0].name,
@@ -594,7 +625,7 @@ class Sqlite3GameStorage(GameStorage):
                              quest.questors[3].name,
                              quest.qtime))
             else:
-                cur.execute("update quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, stage=?, dest1x=?, dest1y=?, dest2x=?, dest2y=?",
+                cur.execute("update dawdle_quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, stage=?, dest1x=?, dest1y=?, dest2x=?, dest2y=?",
                             (quest.mode,
                              quest.text,
                              quest.questors[0].name,
@@ -833,7 +864,9 @@ class DawdleBot(object):
         """Overrideable random func which returns one random element of SEQ."""
         if key in self._overrides:
             return self._overrides[key]
-        return random.choice(seq)
+        # Don't use random.choice here - it uses random access, which
+        # is unsupported by the dict_keys view.
+        return random.sample(seq, 1)[0]
 
 
     def randshuffle(self, key, seq):
@@ -985,7 +1018,7 @@ class DawdleBot(object):
             self.penalize(player, "part")
             player.online = False
             player.lastlogin = time.time()
-            self._db.write_players()
+            self._db.write_players([player])
 
 
     def netsplit(self, user):
@@ -1009,7 +1042,7 @@ class DawdleBot(object):
             self.penalize(player, "quit")
             player.online = False
             player.lastlogin = time.time()
-            self._db.write_players()
+            self._db.write_players([player])
 
 
     def nick_kicked(self, user):
@@ -1019,7 +1052,7 @@ class DawdleBot(object):
             self.penalize(player, "kick")
             player.online = False
             player.lastlogin = time.time()
-            self._db.write_players()
+            self._db.write_players([player])
 
 
     def cmd_align(self, player, nick, args):
@@ -1029,7 +1062,7 @@ class DawdleBot(object):
             return
         player.alignment = args[0]
         self.notice(nick, f"You have converted to {args}")
-        self._db.write_players()
+        self._db.write_players([player])
 
 
     def cmd_help(self, player, nick, args):
@@ -1157,7 +1190,7 @@ class DawdleBot(object):
             p.nick = nick
             self.notice(nick, f"Logon successful. Next level in {duration(p.nextlvl)}.")
             self.chanmsg(f"{C('name', p.name)}, the level {p.level} {p.cclass}, is now online from nickname {nick}. Next level in {duration(p.nextlvl)}.")
-        self._db.write_players()
+        self._db.write_players([p])
 
 
     def cmd_register(self, player, nick, args):
@@ -1236,7 +1269,7 @@ class DawdleBot(object):
             self.notice(nick, "Wrong password.")
         else:
             player.set_password(parts[1])
-            self._db.write_players()
+            self._db.write_players([player])
             self.notice(nick, "Your password was changed.")
 
 
@@ -1245,7 +1278,7 @@ class DawdleBot(object):
         self.notice(nick, "You have been logged out.")
         player.online = False
         player.lastlogin = time.time()
-        self._db.write_players()
+        self._db.write_players([player])
         if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.revoke_voice(nick)
         self.penalize(player, "logout")
@@ -1351,7 +1384,7 @@ class DawdleBot(object):
             self.notice(nick, f"You can't do that.")
         else:
             self._db[args].isadmin = False
-            self._db.write_players()
+            self._db.write_players([player])
             self.notice(nick, f"{args} is no longer an admin.")
 
 
@@ -1393,7 +1426,7 @@ class DawdleBot(object):
             self.notice(nick, f"{args} is already an admin.")
         else:
             self._db[args].isadmin = True
-            self._db.write_players()
+            self._db.write_players([self._db[args]])
             self.notice(nick, f"{args} is now an admin.")
 
 
@@ -1578,6 +1611,7 @@ class DawdleBot(object):
                        "logout": "LOGOUT command"}[kind]
             self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {pendesc}.")
 
+
     def refresh_events(self):
         """Read events file if it has changed."""
         if self._events_loaded == os.path.getmtime(datapath(conf.get("eventsfile"))):
@@ -1594,12 +1628,14 @@ class DawdleBot(object):
     def expire_splits(self):
         """Kick players offline if they were disconnected for too long."""
         expiration = time.time() - conf.get("splitwait")
+        dropped_players = []
         for p in self._db.online_players():
             if p.nick not in self._irc._users and p.lastlogin < expiration:
                 log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
                 self.penalize(p, "dropped")
                 p.online = False
-        self._db.write_players()
+                dropped_players.append(p)
+        self._db.write_players(dropped_players)
 
     async def gametick_loop(self):
         """Main gameplay loop to manage timing."""
@@ -1649,9 +1685,6 @@ class DawdleBot(object):
         self.move_players()
         self.quest_check(now)
 
-        if not self._pause:
-            self._db.write_players()
-
         if now % 120 == 0 and self._quest:
             self._db.update_quest(self._quest)
         if now % 36000 == 0:
@@ -1688,6 +1721,8 @@ class DawdleBot(object):
                 if player.level >= 25 or self.randomly('lowlevel_battle', 4):
                     self.challenge_opp(player)
 
+        self._db.write_players(op)
+
 
     def hand_of_god(self, op):
         """Hand of God that pushes a random player forword or back."""
@@ -1700,7 +1735,7 @@ class DawdleBot(object):
             self.logchanmsg([player], f"Verily I say unto thee, the Heavens have burst forth, and the blessed hand of God carried {C('name', player.name)} {duration(amount)} toward level {player.level + 1}.")
             player.nextlvl -= amount
         self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
-        self._db.write_players()
+        self._db.write_players([player])
 
 
     def find_item(self, player):
@@ -1739,7 +1774,7 @@ class DawdleBot(object):
                                  f"found the {C('item')}level {ilvl} {si.name}{C()}!  {si.flavor}")
                 return
 
-        item = self.randchoice('find_item_itemtype', Player.ITEMS)
+        slot = self.randchoice('find_item_slot', Item.SLOTS)
         level = 0
         if 'find_item_level' in self._overrides:
             level = self._overrides['find_item_level']
@@ -1748,19 +1783,19 @@ class DawdleBot(object):
             for num in range(1, int(player.level * 1.5)):
                 if self.randomly('find_item_level_ok', int(1.4**(num / 4))):
                     level = num
-        old_level = int(getattr(player, item))
+        old_level = player.item_level(slot)
         if level > old_level:
             self.notice(player.nick,
-                             f"You found a {C('item')}level {level} {Player.ITEMDESC[item]}{C()}! "
-                             f"Your current {C('item')}{Player.ITEMDESC[item]}{C()} is only "
-                             f"level {old_level}, so it seems Luck is with you!")
-            player.acquire_item(item, level)
-            self._db.write_players()
+                        f"You found a {C('item')}level {level} {Item.DESC[slot]}{C()}! "
+                        f"Your current {C('item')}{Item.DESC[slot]}{C()} is only "
+                        f"level {old_level}, so it seems Luck is with you!")
+            player.acquire_item(slot, level)
+            self._db.write_players([player])
         else:
             self.notice(player.nick,
-                             f"You found a {C('item')}level {level} {Player.ITEMDESC[item]}{C()}. "
-                             f"Your current {C('item', Player.ITEMDESC[item])} is level {old_level}, "
-                             f"so it seems Luck is against you.  You toss the {C('item', Player.ITEMDESC[item])}.")
+                        f"You found a {C('item')}level {level} {Item.DESC[slot]}{C()}. "
+                        f"Your current {C('item', Item.DESC[slot])} is level {old_level}, "
+                        f"so it seems Luck is against you.  You toss the {C('item', Item.DESC[slot])}.")
 
 
     def pvp_battle(self, player, opp, flavor_start, flavor_win, flavor_loss):
@@ -1792,14 +1827,14 @@ class DawdleBot(object):
                     opp.nextlvl += penalty
                     self.chanmsg(f"{C('name', opp.name)} reaches next level in {duration(opp.nextlvl)}.")
                 elif player.level > 19 and self.randomly('pvp_swap_item', 25):
-                    item = self.randchoice('pvp_swap_itemtype', Player.ITEMS)
-                    playeritem = getattr(player, item)
-                    oppitem = getattr(opp, item)
+                    slot = self.randchoice('pvp_swap_itemtype', Item.SLOTS)
+                    playeritem = player.item_level(slot)
+                    oppitem = opp.item_level(slot)
                     if oppitem > playeritem:
                         self.logchanmsg([player, opp], f"In the fierce battle, {C('name', opp.name)} dropped their {C('item')}level "
-                                        f"{oppitem} {Player.ITEMDESC[item]}{C()}! {C('name', player.name)} picks it up, tossing "
-                                        f"their old {C('item')}level {playeritem} {Player.ITEMDESC[item]}{C()} to {C('name', opp.name)}.")
-                        player.swap_items(opp, item)
+                                        f"{oppitem} {Item.DESC[slot]}{C()}! {C('name', player.name)} picks it up, tossing "
+                                        f"their old {C('item')}level {playeritem} {Item.DESC[slot]}{C()} to {C('name', opp.name)}.")
+                        player.swap_items(opp, slot)
         else:
             # Losing
             loss = 10 if opp is None else max(7, int(opp.level / 7))
@@ -1831,7 +1866,7 @@ class DawdleBot(object):
         op = self.randsample('team_battle_members', op, 6)
         team_a = sum([p.battleitemsum() for p in op[0:3]])
         team_b = sum([p.battleitemsum() for p in op[3:6]])
-        gain = min([p.nextlvl for p in op[0:6]]) * 0.2
+        gain = int(min([p.nextlvl for p in op[0:6]]) * 0.2)
         roll_a = self.randint('team_a_roll', 0, team_a)
         roll_b = self.randint('team_b_roll', 0, team_b)
         if roll_a >= roll_b:
@@ -1854,31 +1889,31 @@ class DawdleBot(object):
         if not player:
             return
 
-        if self.randomly('calamity_item_damage', 10):
+        if player.items and self.randomly('calamity_item_damage', 10):
             # Item damaging calamity
-            item = self.randchoice('calamity_item', Player.ITEMS)
-            if item == "ring":
+            slot = self.randchoice('calamity_slot', player.items.keys())
+            if slot == "ring":
                 msg = f"{C('name', player.name)} accidentally smashed their {C('item', 'ring')} with a hammer!"
-            elif item == "amulet":
+            elif slot == "amulet":
                 msg = f"{C('name', player.name)} fell, chipping the stone in their {C('item', 'amulet')}!"
-            elif item == "charm":
+            elif slot == "charm":
                 msg = f"{C('name', player.name)} slipped and dropped their {C('item', 'charm')} in a dirty bog!"
-            elif item == "weapon":
+            elif slot == "weapon":
                 msg = f"{C('name', player.name)} left their {C('item', 'weapon')} out in the rain to rust!"
-            elif item == "helm":
+            elif slot == "helm":
                 msg = f"{C('name')}{player.name}'s{C()} {C('item', 'helm')} was touched by a rust monster!"
-            elif item == "tunic":
+            elif slot == "tunic":
                 msg = f"{C('name', player.name)} spilled a level 7 shrinking potion on their {C('item', 'tunic')}!"
-            elif item == "gloves":
+            elif slot == "gloves":
                 msg = f"{C('name', player.name)} dipped their gloved fingers in a pool of acid!"
-            elif item == "leggings":
+            elif slot == "leggings":
                 msg = f"{C('name', player.name)} burned a hole through their {C('item', 'leggings')} while ironing them!"
-            elif item == "shield":
+            elif slot == "shield":
                 msg = f"{C('name')}{player.name}'s{C()} {C('item', 'shield')} was damaged by a dragon's fiery breath!"
-            elif item == "boots":
+            elif slot == "boots":
                 msg = f"{C('name', player.name)} stepped in some hot lava!"
-            self.logchanmsg([player], msg + f" {C('name')}{player.name}'s{C()} {C('item', Player.ITEMDESC[item])} loses 10% of its effectiveness.")
-            setattr(player, item, int(getattr(player, item) * 0.9))
+            self.logchanmsg([player], msg + f" {C('name')}{player.name}'s{C()} {C('item', Item.DESC[slot])} loses 10% of its effectiveness.")
+            player.items[slot].level = int(player.items[slot].level * 0.9)
             return
 
         # Level setback calamity
@@ -1897,32 +1932,32 @@ class DawdleBot(object):
         if not player:
             return
 
-        if self.randomly('godsend_item_improve', 10):
+        if player.items and self.randomly('godsend_item_improve', 10):
             # Item improving godsend
-            item = self.randchoice('godsend_item', Player.ITEMS)
-            if item == "ring":
+            slot = self.randchoice('godsend_slot', player.items.keys())
+            if slot == "ring":
                 msg = f"{C('name', player.name)} dipped their {C('item', 'ring')} into a sacred fountain!"
-            elif item == "amulet":
+            elif slot == "amulet":
                 msg = f"{C('name')}{player.name}'s{C()} {C('item', 'amulet')} was blessed by a passing cleric!"
-            elif item == "charm":
+            elif slot == "charm":
                 msg = f"{C('name')}{player.name}'s{C()} {C('item', 'charm')} ate a bolt of lightning!"
-            elif item == "weapon":
+            elif slot == "weapon":
                 msg = f"{C('name', player.name)} sharpened the edge of their {C('item', 'weapon')}!"
-            elif item == "helm":
+            elif slot == "helm":
                 msg = f"{C('name', player.name)} polished their {C('item', 'helm')} to a mirror shine."
-            elif item == "tunic":
+            elif slot == "tunic":
                 msg = f"A magician cast a spell of Rigidity on {C('name')}{player.name}'s{C()} {C('item', 'tunic')}!"
-            elif item == "gloves":
+            elif slot == "gloves":
                 msg = f"{C('name', player.name)} lined their {C('item', 'gloves')} with a magical cloth!"
-            elif item == "leggings":
+            elif slot == "leggings":
                 msg = f"The local wizard imbued {C('name')}{player.name}'s{C()} {C('item', 'pants')} with a Spirit of Fortitude!"
-            elif item == "shield":
+            elif slot == "shield":
                 msg = f"{C('name', player.name)} reinforced their {C('item', 'shield')} with a dragon's scale!"
-            elif item == "boots":
+            elif slot == "boots":
                 msg = f"A sorceror enchanted {C('name')}{player.name}'s{C()} {C('item', 'boots')} with Swiftness!"
 
-            self.logchanmsg([player], msg + f" {C('name')}{player.name}'s{C()} {C('item', Player.ITEMDESC[item])} gains 10% effectiveness.")
-            setattr(player, item, int(getattr(player, item) * 1.1))
+            self.logchanmsg([player], msg + f" {C('name')}{player.name}'s{C()} {C('item', Item.DESC[slot])} gains 10% effectiveness.")
+            player.items[slot].level = int(player.items[slot].level * 1.1)
             return
 
         # Level godsend
@@ -1945,17 +1980,17 @@ class DawdleBot(object):
             target = self.randchoice('evilness_target', [p for p in op if p.alignment == 'g'])
             if not target:
                 return
-            item = self.randchoice('evilness_item', Player.ITEMS)
-            if getattr(player, item) < getattr(target, item):
-                player.swap_items(target, item)
+            slot = self.randchoice('evilness_slot', Item.SLOTS)
+            if player.item_level(slot) < target.item_level(slot):
+                player.swap_items(target, slot)
                 self.logchanmsg([player, target],
-                                f"{C('name', player.name)} stole {target.name}'s {C('item')}level {getattr(player, item)} "
-                                f"{Player.ITEMDESC[item]}{C()} while they were sleeping!  {C('name', player.name)} "
-                                f"leaves their old {C('item')}level {getattr(target, item)} {Player.ITEMDESC[item]}{C()} "
+                                f"{C('name', player.name)} stole {target.name}'s {C('item')}level {player.item_level(slot)} "
+                                f"{Item.DESC[slot]}{C()} while they were sleeping!  {C('name', player.name)} "
+                                f"leaves their old {C('item')}level {target.item_level(slot)} {Item.DESC[slot]}{C()} "
                                 f"behind, which {C('name', target.name)} then takes.")
             else:
                 self.notice(player.nick,
-                            f"You made to steal {C('name', target.name)}'s {C('item', Player.ITEMDESC[item])}, "
+                            f"You made to steal {C('name', target.name)}'s {C('item', Item.DESC[slot])}, "
                             f"but realized it was lower level than your own.  You creep "
                             f"back into the shadows.")
         else:

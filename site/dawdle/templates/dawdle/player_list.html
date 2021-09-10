@@ -1,3 +1,4 @@
+{% load duration %}
 <html><head>
 
   </head><body>
@@ -6,7 +7,7 @@
 
     <ol>
         {% for p in object_list %}
-            <li><a href="{% url 'dawdle:player-detail' p.name %}">{{p.name}}</a>, the {{p.alignment}} level {{p.level}} {{p.cclass}}. Next level in 0 days, 00:10:00.</li>
+            <li><a href="{% url 'dawdle:player-detail' p.name %}">{{p.name}}</a>, the {{p.alignment}} level {{p.level}} {{p.cclass}}. Next level in {{p.nextlvl|duration}}.</li>
         {% endfor %}
     </ol>
 </body></html>

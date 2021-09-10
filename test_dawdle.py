@@ -44,9 +44,8 @@ class TestGameDBIdleRPG(unittest.TestCase):
             db = bot.GameDB(bot.IdleRPGGameStorage(os.path.join(tmpdir, 'dawdle_test.db')))
             db.create()
             op = db.new_player('foo', 'bar', 'baz')
-            op.amulet = 55
-            op.helm = 42
-            op.helmname = "Jeff's Cluehammer of Doom"
+            op.items['amulet'] = bot.Item(55, '')
+            op.items['helm'] = bot.Item(42, "Jeff's Cluehammer of Doom")
             db.write_players()
             db.load_players()
             p = db['foo']
@@ -231,9 +230,9 @@ class TestPvPBattle(unittest.TestCase):
 
     def test_player_battle_win(self):
         a = self.bot._db.new_player('a', 'b', 'c')
-        a.amulet = 20
+        a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
-        b.amulet = 40
+        b.items['amulet'] = bot.Item(40, '')
         self.bot._overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
@@ -252,7 +251,7 @@ class TestPvPBattle(unittest.TestCase):
     def test_player_battle_bot(self):
         conf._conf['botnick'] = 'dawdlerpg'
         a = self.bot._db.new_player('a', 'b', 'c')
-        a.amulet = 20
+        a.items['amulet'] = bot.Item(20, '')
         self.bot._overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
@@ -270,9 +269,9 @@ class TestPvPBattle(unittest.TestCase):
 
     def test_player_battle_lose(self):
         a = self.bot._db.new_player('a', 'b', 'c')
-        a.amulet = 20
+        a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
-        b.amulet = 40
+        b.items['amulet'] = bot.Item(40, '')
         self.bot._overrides = {
             'pvp_player_roll': 10,
             'pvp_opp_roll': 20,
@@ -290,9 +289,9 @@ class TestPvPBattle(unittest.TestCase):
 
     def test_player_battle_critical(self):
         a = self.bot._db.new_player('a', 'b', 'c')
-        a.amulet = 20
+        a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
-        b.amulet = 40
+        b.items['amulet'] = bot.Item(40, '')
         self.bot._overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
@@ -315,9 +314,9 @@ class TestPvPBattle(unittest.TestCase):
     def test_player_battle_swapitem(self):
         a = self.bot._db.new_player('a', 'b', 'c')
         a.level = 20
-        a.amulet = 20
+        a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
-        b.amulet = 40
+        b.items['amulet'] = bot.Item(40, '')
         self.bot._overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
@@ -333,16 +332,16 @@ class TestPvPBattle(unittest.TestCase):
             "In the fierce battle, b dropped their level 40 amulet! a picks it up, tossing their old level 20 amulet to b."
             ])
         self.assertEqual(a.nextlvl, 558)
-        self.assertEqual(a.amulet, 40)
-        self.assertEqual(b.amulet, 20)
+        self.assertEqual(a.items['amulet'].level, 40)
+        self.assertEqual(b.items['amulet'].level, 20)
 
 
     def test_player_battle_finditem(self):
         a = self.bot._db.new_player('a', 'b', 'c')
         a.nick = 'a'
-        a.amulet = 20
+        a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
-        b.amulet = 40
+        b.items['amulet'] = bot.Item(40, '')
         self.bot._overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
@@ -350,7 +349,7 @@ class TestPvPBattle(unittest.TestCase):
             'pvp_swap_item': False,
             'pvp_find_item': True,
             'specitem_find': False,
-            'find_item_itemtype': 'charm',
+            'find_item_slot': 'charm',
             'find_item_level': 5
         }
         self.bot.pvp_battle(a, b, "fought", "and has won", "and has lost")
@@ -386,12 +385,18 @@ class TestTeamBattle(unittest.TestCase):
 
     def test_win(self):
         op = [self.bot._db.new_player(pname, 'a', 'b') for pname in "abcdef"]
-        op[0].amulet, op[0].nextlvl = 20, 1200
-        op[1].amulet, op[1].nextlvl = 20, 3600
-        op[2].amulet, op[2].nextlvl = 20, 3600
-        op[3].amulet, op[3].nextlvl = 40, 3600
-        op[4].amulet, op[4].nextlvl = 40, 3600
-        op[5].amulet, op[5].nextlvl = 40, 3600
+        op[0].items['amulet'] = bot.Item(20, "")
+        op[1].items['amulet'] = bot.Item(20, "")
+        op[2].items['amulet'] = bot.Item(20, "")
+        op[3].items['amulet'] = bot.Item(40, "")
+        op[4].items['amulet'] = bot.Item(40, "")
+        op[5].items['amulet'] = bot.Item(40, "")
+        op[0].nextlvl = 1200
+        op[1].nextlvl = 3600
+        op[2].nextlvl = 3600
+        op[3].nextlvl = 3600
+        op[4].nextlvl = 3600
+        op[5].nextlvl = 3600
         self.bot._overrides = {
             'team_battle_members': op,
             'team_a_roll': 60,
@@ -402,12 +407,18 @@ class TestTeamBattle(unittest.TestCase):
 
     def test_loss(self):
         op = [self.bot._db.new_player(pname, 'a', 'b') for pname in "abcdef"]
-        op[0].amulet, op[0].nextlvl = 20, 1200
-        op[1].amulet, op[1].nextlvl = 20, 3600
-        op[2].amulet, op[2].nextlvl = 20, 3600
-        op[3].amulet, op[3].nextlvl = 40, 3600
-        op[4].amulet, op[4].nextlvl = 40, 3600
-        op[5].amulet, op[5].nextlvl = 40, 3600
+        op[0].items['amulet'] = bot.Item(20, "")
+        op[1].items['amulet'] = bot.Item(20, "")
+        op[2].items['amulet'] = bot.Item(20, "")
+        op[3].items['amulet'] = bot.Item(40, "")
+        op[4].items['amulet'] = bot.Item(40, "")
+        op[5].items['amulet'] = bot.Item(40, "")
+        op[0].nextlvl = 1200
+        op[1].nextlvl = 3600
+        op[2].nextlvl = 3600
+        op[3].nextlvl = 3600
+        op[4].nextlvl = 3600
+        op[5].nextlvl = 3600
         self.bot._overrides = {
             'team_battle_members': op,
             'team_a_roll': 30,
@@ -433,10 +444,10 @@ class TestEvilness(unittest.TestCase):
         op = [self.bot._db.new_player('a', 'b', 'c'), self.bot._db.new_player('b', 'c', 'd')]
         op[0].alignment = 'e'
         op[1].alignment = 'g'
-        op[1].amulet = 20
+        op[1].items['amulet'] = bot.Item(20, "")
         self.bot._overrides = {
             'evilness_theft': True,
-            'evilness_item': 'amulet'
+            'evilness_slot': 'amulet'
         }
         self.bot.evilness(op)
         self.assertEqual(self.irc.chanmsgs[0], "a stole b's level 20 amulet while they were sleeping!  a leaves their old level 0 amulet behind, which b then takes.")
