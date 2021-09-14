@@ -2032,6 +2032,10 @@ class DawdleBot(object):
             destx = self._quest.dests[self._quest.stage-1][0]
             desty = self._quest.dests[self._quest.stage-1][1]
             for p in self._quest.questors:
+                if not self.randomly("quest_movement", 10):
+                    # Move at 10% speed when questing.
+                    op.remove(p)
+                    continue
                 # mode 2 questors always move towards the next goal
                 xmove = 0
                 ymove = 0
