@@ -2,13 +2,26 @@
 
 DawdleRPG is an IdleRPG clone written in Python.
 
-## Setup
+## Basic Setup
 
 - Edit `dawdle.conf` to configure your bot.
 - Run `dawdle.py <path to dawdle.conf>`
 - The data directory defaults to the parent directory of the
   configuration file, and dawdlerpg expects files to be in that
   directory.
+
+## Setup with Website
+
+The website is written on top of the Django web framework, so it must
+first be installed.
+
+- Run `pip install django`, making sure that `~/.local/bin` is part of
+  your `PATH` environment variable.
+- Run `site/manage.py migrate` to create the database.
+- Set `store_format sqlite3` in your `dawdle.conf`
+- Set `dbfile <path to site/db.sqlite3>` in your `dawdle.conf`
+- Run `dawdle.py <path to your dawdle.conf>`
+- Point a webserver at your Django instance.
 
 ## Migrating from IdleRPG
 
@@ -21,6 +34,12 @@ need to replace them with the `-o key=value` option.
 
 ## Differences from IdleRPG
 
+- Names, items, and durations are in different colors.
+- Output throttling allows configurable rate over a period.
+- Long messages are word wrapped.
+- Logging can be set to different levels.
+- Better IRC protocol support.
+- More game numbers are configurable.
 - Quest pathfinding is much more efficient.
 - Fights caused by map collisions have chance of finding item.
 - All worn items have a chance to get buffs/debuffs instead of a subset.
