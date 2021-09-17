@@ -1,0 +1,92 @@
+{% extends "dawdle/base.html" %}
+
+{% block content %}
+
+<div class="contentbox">
+  <h1>Welcome to DawdleRPG</h1>
+
+  <p>DawdleRPG is an IRC game where your alter-ego goes adventuring
+    across a rich land full of magic and adventure, while players lurk
+    silently in a channel.  You register your character, and sit back
+    and enjoy the ride, taking care not to disturb the channel.</p>
+
+  <h2>Getting Started</h2>
+
+  <p>To start, login to your favorite IRC network and join the
+    DawdleRPG channel.  Then, send a private message to the bot:</p>
+
+  <p><code>/msg dawdlerpg register &lt;name&gt; &lt;password&gt;
+      &lt;character class&gt;</code></p>
+
+  <p>If all goes well, your character will start at level 0 and begin
+    wandering the lands.  You may explore the other commands by
+    messaging <code>help</code> to the bot.</p>
+
+  <h2>Advancement & Penalties</h2>
+
+  <p>Your character advances through the passage of time.  You will be
+    kept updated regularly on how long your character has until the
+    next level.  Events may happen to your character which will push
+    you forward or back along your advancement path.</p>
+
+  <p>As much as doing nothing on the channel is rewarded, doing
+    something on the channel is punished.  Sending messages, changing
+    your nick, parting the channel, getting kicked from the channel,
+    quitting IRC, and using the LOGOUT command are all penalized to
+    different degrees.  If you are disconnected or netsplit, your
+    character will <em>not</em> be penalized as long as you login
+    again within 15 minutes.</p>
+
+  <p>Incurring a penalty may cause you to fail a quest, penalizing
+    everyone online!  See below for details.</p>
+
+  <h2>Combat and Equipment</h2>
+
+  <p>Characters will frequently engage in combat.  Combat is resolved
+    by taking the sum of item levels of each combatant, then randomly
+    picking a number between 0 and that sum.  The side with the higher
+    sum wins the combat.</p>
+
+  <p>In one-on-one fights, the winner may take an item from the loser,
+    giving the loser a replacement item in a moment of pity.  The
+    winner might also deal a Critical Strike, which slows the loser's
+    progess to the next level.  Regardless of outcome, the challenger
+    may randomly find an item, and pick it up.</p>
+
+  <p>The level of equipment found is usually limited by the level of
+    the character, but there are certain rare artifacts of great
+    power.  The level of these artifacts can be far beyond what a
+    character may usually possess.</p>
+
+  <h2>Alignment</h2>
+
+  <p>Your character starts out as neutral.  By using
+    the <code>alignment</code> command, you may change it to good or
+    evil (or back to neutral, if you tire of the struggle).</p>
+
+  <p>Good characters get a bonus to their combat power, and
+    occasionally help each other to the next level.  They are more
+    likely to find an item after battling. However, they are much less
+    likely to deal a Critical Strike.</p>
+
+  <p>Evil characters have a penalty to their combat power, but are
+    much more likely to deal a Critical Strike.  They are less likely to
+    find an item after the battle.  They will steal an item from a
+    good character if they can, but are frequently forsaken by their
+    evil god.</p>
+
+  <h2>Quests</h2>
+
+  <p>The gods will occasionally pick out four characters to go on a
+    Quest.  The nature of this quest may vary - sometimes a quest will
+    take a certain length of time.  Sometimes the characters must
+    journey together to a far-off land.  On completion of the quest,
+    each questor will advance 25% of their time to next level.</p>
+
+  <p>If any questor fails the quest, however, if they are ever
+    penalized, the quest has failed, and the gods will
+    punish <em>all</em> characters with a stiff penalty.</p>
+
+</div>
+
+{% endblock %}

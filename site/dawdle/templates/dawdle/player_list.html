@@ -1,13 +1,72 @@
+{% extends "dawdle/base.html" %}
+{% load static %}
 {% load duration %}
-<html><head>
+{% load alignment %}
 
-  </head><body>
+{% block extrastyles %}
+#playerlist {
+  border-collapse: collapse;
+}
+#playerlist tr:nth-child(even) {
+  background: #E1CDB5;
+}
+#playerlist thead tr {
+  background: #90708C;
+}
+#playerlist thead tr td {
+  color: white;
+  font-weight: bold;
+  padding: 0.5rem 1rem;
+}
+#playerlist td {
+  padding: 0.1rem 1rem;
+}
+#playerlist a:hover {
+  color: blue;
+  text-decoration: underline;
+}
+.online a {
+  text-decoration: none;
+  color: black;
+}
+.offline {
+  color: gray;
+}
+.online a:hover {
+  color: blue;
+  text-decoration: underline;
+}
+{% endblock %}
+
+{% block content %}
+  <div class="contentbox">
     <h1>Players</h1>
-    Pick a player to view.
 
-    <ol>
+    <table id="playerlist">
+      <thead>
+        <tr><td>Rank</td><td style="width:30rem">Name</td><td>Time to next level</td></tr>
+      </thead><tbody>
         {% for p in object_list %}
-            <li><a href="{% url 'dawdle:player-detail' p.name %}">{{p.name}}</a>, the {{p.alignment}} level {{p.level}} {{p.cclass}}. Next level in {{p.nextlvl|duration}}.</li>
+        <tr class="{%if p.online %}online{% else %}offline{% endif %}">
+          <td style="text-align:right">#{{forloop.counter}}</td>
+          <td><img style="height: 0.5em; width: 0.5em"
+                                             src="{% if p.online %}
+                                                  {% static 'dawdle/Green_sphere.svg' %}
+                                                  {% else %}
+                                                  {% static 'dawdle/Red_sphere.svg' %}
+                                                  {% endif %}"
+                                             alt="{% if p.online %}
+                                                  On
+                                                  {% else %}
+                                                  Off
+                                                  {% endif %}">
+            <a href="{% url 'dawdle:player-detail' p.name %}">{{p.name}},
+              the <span class="{{p.alignment|alignment}}-align">{{p.alignment|alignment}}</span>
+            level {{p.level}} {{p.cclass}}</a>
+          </td>
+          <td>{{p.nextlvl|duration}}.</td>
+        </tr>
         {% endfor %}
-    </ol>
-</body></html>
+    </tbody></table>
+  </div>
+{% endblock %}

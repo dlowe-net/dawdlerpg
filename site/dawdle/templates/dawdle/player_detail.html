@@ -1,7 +1,9 @@
+{% extends "dawdle/base.html" %}
 {% load duration %}
-<html><head>
-
-  </head><body>
+{% load alignment %}
+b
+{% block content %}
+  <div class="contentbox">
     <h1>{{player.name}}, the level {{player.level}} {{player.cclass}}</h1>
     <table><tbody>
         <tr>
@@ -17,9 +19,11 @@
           <td>Time to next level:</td><td>{{player.nextlvl|duration}}</td>
         </tr>
         <tr>
-          <td>Alignment:</td><td>{{player.alignment}}</td>
+          <td>Alignment:</td><td><span class="{{player.alignment|alignment}}-align">{{player.alignment|alignment}}</span></td>
         </tr>
     </tbody></table>
+
+    </div><div class="contentbox">
     <h2>Penalties</h2>
     <table><tbody>
         <tr>
@@ -41,6 +45,7 @@
     </tbody></table>
     <p>Total penalties: {{total_penalties|duration}}</p>
 
+    </div><div class="contentbox">
     <h2>Items</h2>
     <ul>
     {% for item in player.item_set.all|dictsort:"slot" %}
@@ -48,12 +53,13 @@
     {% endfor %}
     </ul>
     <p>Total item level: {{ total_items }}</p>
-
+    </div><div class="contentbox">
     <h2>History</h2>
     <ul>
     {% for event in player.history_set.all|dictsort:"time" %}
     <li>{{event.time}}: {{event.text}}</li>
     {% endfor %}
     </ul>
+    </div>
 
-</body></html>
+{% endblock %}

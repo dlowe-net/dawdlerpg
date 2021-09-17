@@ -1,0 +1,111 @@
+<html><head><title>{% block title %}DawdleRPG{% endblock %}</title>
+    <style>
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #eee;
+}
+#header-container {
+    color: #e1cdb5;
+    background: #49306b;
+    margin: 0;
+    padding: 0 0.5em;
+}
+#header {
+    text-align: left;
+    height: 67px;
+    padding: 0;
+    margin: 0 auto;
+    width: 70%;
+    position: relative;
+}
+#header h1 {
+    display: inline-block;
+    position: absolute;
+    left: 0;
+    margin: 0;
+    line-height: 67px;
+}
+#header ul {
+    display: inline-block;
+    position: absolute;
+    right: 0;
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+    height: 100%:
+}
+#header li {
+    display: inline-block;
+    height: 100%;
+    margin: 0;
+    line-height: 67px;
+    text-align: center;
+    padding-left: 1em;
+    padding-right: 1em;
+}
+#header li:hover {
+    background-color: #AF97AC;
+}
+#header a {
+    color: #e1cdb5;
+    text-decoration: none;
+}
+#content {
+    margin: 1em auto;
+    width: 75%;
+}
+.contentbox {
+    background: white;
+    margin: 2rem;
+    padding: 0.5rem;
+}
+.contentbox h1 {
+    margin-top: 0;
+    padding: 0;
+}
+.contentbox h2 {
+    margin-top: 0;
+    padding: 0;
+}
+.good-align {
+    color: #00f;
+}
+.evil-align {
+    color: #500;
+}
+      @media only screen and (max-width: 1200px) {
+          body {
+              font-size: 200%;
+              margin: 0;
+              padding: 0;
+          }
+          #header-container {
+              padding-top: 0;
+              padding-bottom: 0;
+          }
+          #content {
+              width: 100%;
+              margin: 0;
+          }
+          .contentbox {
+              margin: 0 0;
+          }
+      }
+
+{% block extrastyles %}{% endblock %}
+    </style>
+  </head><body>
+    <div id="header-container">
+      <div id="header">
+        <a href="/"><h1>DawdleRPG</h1></a>
+        <ul>
+          <a href="{% url 'dawdle:about' %}"><li>About</li></a>
+          <a href="{% url 'dawdle:player-list' %}"><li>Players</li></a>
+          <a href="/quest"><li>Quest</li></a>
+        </ul>
+      </div>
+    </div>
+    <div id="content">{% block content %}{% endblock %}</div>
+</body></html>
