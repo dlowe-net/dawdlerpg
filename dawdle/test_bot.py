@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import datetime
 import os.path
 import tempfile
 import time
@@ -477,7 +478,7 @@ class TestQuest(unittest.TestCase):
         for u,p in zip(users,op):
             p.online = True
             p.level = 25
-            p.lastlogin = now - 36001
+            p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
             p.nick = u.nick
             p.userhost = u.userhost
         self.bot._overrides = {
@@ -512,7 +513,7 @@ class TestQuest(unittest.TestCase):
         for u,p in zip(users,op):
             p.online = True
             p.level = 25
-            p.lastlogin = now - 36001
+            p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
             p.nick = u.nick
             p.userhost = u.userhost
         self.bot._overrides = {
@@ -551,7 +552,7 @@ class TestQuest(unittest.TestCase):
             p.online = True
             p.nick = p.name
             p.level = 25
-            p.lastlogin = now - 36001
+            p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
         self.bot._overrides = {
             "quest_members": op,
             "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
@@ -585,7 +586,7 @@ class TestAdminCommands(unittest.TestCase):
         level = 25
         expired = time.time() - 9 * 86400
         for p in op[:2]:
-            p.lastlogin = expired
+            p.lastlogin = datetime.datetime.fromtimestamp(expired)
         op[3].online = True
         op[3].isadmin = True
         self.bot.cmd_delold(op[3], op[3].nick, "7")

@@ -15,6 +15,7 @@
 import asyncio
 import collections
 import crypt
+import datetime
 import itertools
 import os
 import os.path
@@ -127,7 +128,7 @@ class Player(object):
     @staticmethod
     def new_player(pname, pclass, ppass, nextlvl):
         """Initialize a new player."""
-        now = int(time.time())
+        now = datetime.datetime.now().replace(microsecond=0)
         p = Player()
         # name of account
         p.name = pname
@@ -365,8 +366,8 @@ class IdleRPGGameStorage(GameStorage):
             str(p.penquit + p.pendropped),
             str(p.penquest),
             str(p.penlogout),
-            str(int(p.created)),
-            str(int(p.lastlogin)),
+            str(int(p.created.timestamp())),
+            str(int(p.lastlogin.timestamp())),
             self._item_to_code(p.item_level("amulet"), p.item_name("amulet")),
             self._item_to_code(p.item_level("charm"), p.item_name("charm")),
             self._item_to_code(p.item_level("helm"), p.item_name("helm")),
@@ -411,6 +412,9 @@ class IdleRPGGameStorage(GameStorage):
                     d[f] = (d[f] == '1')
 
                 d['pendropped'] = 0 # unsupported in saving
+
+                d['created'] = datetime.datetime.fromtimestamp(d['created'])
+                d['lastlogin'] = datetime.datetime.fromtimestamp(d['lastlogin'])
 
                 p = Player.from_dict(d)
                 p.items = items
@@ -524,6 +528,7 @@ class Sqlite3GameStorage(GameStorage):
         """Destroys all data in the db without deleting it."""
         with self._connect() as cur:
             cur.execute("delete from dawdle_player")
+            cur.execute("delete from dawdle_item")
             cur.execute("delete from dawdle_history")
             cur.execute("delete from dawdle_quest")
 
@@ -764,7 +769,7 @@ class GameDB(object):
 
     def inactive_since(self, expire):
         """Return all players that have been inactive since a point in time."""
-        return [p for p in self._players.values() if not p.online and p.lastlogin < expire]
+        return [p for p in self._players.values() if not p.online and p.lastlogin.timestamp() < expire]
 
 
 # SpecialItem is a configuration tuple for specifying special items.
@@ -916,7 +921,7 @@ class DawdleBot(object):
                 autologin.append(p.name)
             else:
                 p.online = False
-                p.lastlogin = time.time()
+                p.lastlogin = datetime.datetime.now()
         self._db.write_players()
         if autologin:
             self.chanmsg(f"{len(autologin)} user{plural(len(autologin))} automatically logged in; accounts: {', '.join(autologin)}")
@@ -1017,7 +1022,7 @@ class DawdleBot(object):
         if player:
             self.penalize(player, "part")
             player.online = False
-            player.lastlogin = time.time()
+            player.lastlogin = datetime.datetime.now()
             self._db.write_players([player])
 
 
@@ -1025,14 +1030,14 @@ class DawdleBot(object):
         """Called when someone was netsplit."""
         player = self._db.from_user(user)
         if player:
-            player.lastlogin = time.time()
+            player.lastlogin = datetime.datetime.now()
 
 
     def nick_dropped(self, user):
         """Called when someone was disconnected."""
         player = self._db.from_user(user)
         if player:
-            player.lastlogin = time.time()
+            player.lastlogin = datetime.datetime.now()
 
 
     def nick_quit(self, user):
@@ -1041,7 +1046,7 @@ class DawdleBot(object):
         if player:
             self.penalize(player, "quit")
             player.online = False
-            player.lastlogin = time.time()
+            player.lastlogin = datetime.datetime.now()
             self._db.write_players([player])
 
 
@@ -1051,7 +1056,7 @@ class DawdleBot(object):
         if player:
             self.penalize(player, "kick")
             player.online = False
-            player.lastlogin = time.time()
+            player.lastlogin = datetime.datetime.now()
             self._db.write_players([player])
 
 
@@ -1180,7 +1185,7 @@ class DawdleBot(object):
             self._irc.grant_voice(nick)
         p = self._db[pname]
         p.userhost = self._irc._users[nick].userhost
-        p.lastlogin = time.time()
+        p.lastlogin = datetime.datetime.now()
         if p.online and p.nick == nick:
             # If the player was already online and they have the same
             # nick, they need no reintroduction to the channel.
@@ -1277,7 +1282,7 @@ class DawdleBot(object):
         """stop playing as character."""
         self.notice(nick, "You have been logged out.")
         player.online = False
-        player.lastlogin = time.time()
+        player.lastlogin = datetime.datetime.now()
         self._db.write_players([player])
         if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.revoke_voice(nick)
@@ -1630,7 +1635,7 @@ class DawdleBot(object):
         expiration = time.time() - conf.get("splitwait")
         dropped_players = []
         for p in self._db.online_players():
-            if p.nick not in self._irc._users and p.lastlogin < expiration:
+            if p.nick not in self._irc._users and p.lastlogin.timestamp() < expiration:
                 log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
                 self.penalize(p, "dropped")
                 p.online = False
@@ -2078,7 +2083,7 @@ class DawdleBot(object):
     def quest_start(self, now):
         """Start a random quest with four random players."""
         latest_login_time = now - 36000
-        qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin < latest_login_time]
+        qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin.timestamp() < latest_login_time]
         if len(qp) < 4:
             return
         qp = self.randsample('quest_members', qp, 4)
