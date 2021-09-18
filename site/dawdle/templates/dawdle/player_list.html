@@ -5,6 +5,7 @@
 
 {% block extrastyles %}
 #playerlist {
+  display: inline-block;
   border-collapse: collapse;
 }
 #playerlist tr:nth-child(even) {
@@ -24,6 +25,11 @@
 #playerlist a:hover {
   color: blue;
   text-decoration: underline;
+}
+#pmap-container {
+  display: inline-block;
+  padding: 1rem;
+  vertical-align: top;
 }
 .online a {
   text-decoration: none;
@@ -68,5 +74,17 @@
         </tr>
         {% endfor %}
     </tbody></table>
+
+    <div id="pmap-container">
+      <img id="pmap" src="{% url 'dawdle:map' %}" alt="Player Map" usemap="#playermap">
+    </div>
+    <map name="playermap">
+      {% for p in object_list %}
+      <area shape="circle"
+            coords="{{p.posx}},{{p.posy}},3"
+            alt="{{p.name}}"
+            href="{% url 'dawdle:player-detail' p.name %}">
+      {% endfor %}
+    </map>
   </div>
 {% endblock %}
