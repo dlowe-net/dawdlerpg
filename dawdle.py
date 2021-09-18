@@ -33,8 +33,6 @@ import dawdle.log as dawdlelog
 
 def first_setup(db):
     """Perform initialization of game."""
-    if db.exists():
-        return
     pname = input(f"{bot.datapath(conf.get('dbfile'))} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf.get('owner')}]: ")
     if pname == "":
         pname = conf.get("owner")
@@ -49,12 +47,13 @@ def first_setup(db):
     finally:
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old)
 
-    db.create()
+    if not db.exists():
+        db.create()
     p = db.new_player(pname, pclass, ppass)
     p.isadmin = True
-    db.write()
+    db.write_players()
 
-    print(f"OK, wrote you into {conf.datapath(conf.get('dbfile'))}")
+    print(f"\n\nOK, wrote you into {bot.datapath(conf.get('dbfile'))}\n")
 
 
 def check_pidfile(pidfile):
@@ -137,7 +136,8 @@ def start_bot():
     if db.exists():
         db.backup_store()
         db.load_players()
-    else:
+
+    if db.count_players() == 0:
         first_setup(db)
 
     if conf.has("pidfile"):

@@ -17,9 +17,10 @@ first be installed.
 
 - Run `pip install django`, making sure that `~/.local/bin` is part of
   your `PATH` environment variable.
-- Run `site/manage.py migrate` to create the database.
+- Run `site/manage.py migrate` to create the main database.
+- Run `site/manage.py migrate --database=game` to create the main database.
 - Set `store_format sqlite3` in your `dawdle.conf`
-- Set `dbfile <path to site/db.sqlite3>` in your `dawdle.conf`
+- Set `dbfile <path to site/game.sqlite3>` in your `dawdle.conf`
 - Run `dawdle.py <path to your dawdle.conf>`
 - Point a webserver at your Django instance.
 

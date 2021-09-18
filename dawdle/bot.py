@@ -701,6 +701,8 @@ class GameDB(object):
             raise KeyError
 
         p = Player.new_player(pname, pclass, ppass, conf.get("rpbase"))
+        p.posx = self.randint(0, conf.get("mapx"))
+        p.posy = self.randint(0, conf.get("mapy"))
         self._players[pname] = p
         self._store.new(p)
 
