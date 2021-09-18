@@ -55,11 +55,11 @@
         {% for p in object_list %}
         <tr class="{%if p.online %}online{% else %}offline{% endif %}">
           <td style="text-align:right">#{{forloop.counter}}</td>
-          <td><img style="height: 0.5em; width: 0.5em"
+          <td><img style="height: 0.7em; width: 0.7em"
                                              src="{% if p.online %}
-                                                  {% static 'dawdle/Green_sphere.svg' %}
+                                                  {% static 'dawdle/Blue_sphere.svg' %}
                                                   {% else %}
-                                                  {% static 'dawdle/Red_sphere.svg' %}
+                                                  {% static 'dawdle/Gray_sphere.svg' %}
                                                   {% endif %}"
                                              alt="{% if p.online %}
                                                   On

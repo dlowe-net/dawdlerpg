@@ -27,14 +27,15 @@ class MapView(View):
         draw = ImageDraw.Draw(full_map)
         if 'player' in kwargs:
             pquery = Player.objects.filter(name=kwargs['player'])
-            dotsize = 3
+            dotsize = 5
         else:
             pquery = Player.objects
-            dotsize = 1
+            dotsize = 3
 
         for p in pquery.all():
-            color = (0xff, 0x00, 0x00) if p.online else (0xee, 0xee, 0xee)
-            draw.ellipse([p.posx-dotsize, p.posy-dotsize, p.posx+dotsize, p.posy+dotsize], outline=color, fill=color)
+            fillcolor = (0x00, 0x1e, 0xe9) if p.online else (0xaa, 0xaa, 0xaa)
+            strokecolor = (0x80, 0xbb, 0xff) if p.online else (0xee, 0xee, 0xee)
+            draw.ellipse([p.posx-dotsize, p.posy-dotsize, p.posx+dotsize, p.posy+dotsize], outline=strokecolor, fill=fillcolor)
         map_bytes = io.BytesIO()
         full_map.save(map_bytes, format="png")
         return HttpResponse(map_bytes.getvalue(), content_type='image/png')
