@@ -14,7 +14,7 @@ body {
 }
 #header {
     text-align: left;
-    height: 67px;
+    #height: 67px;
     padding: 0;
     margin: 0 auto;
     width: 70%;
@@ -22,8 +22,6 @@ body {
 }
 #header h1 {
     display: inline-block;
-    position: absolute;
-    left: 0;
     margin: 0;
     line-height: 67px;
 }
@@ -38,7 +36,6 @@ body {
 }
 #header li {
     display: inline-block;
-    height: 100%;
     margin: 0;
     line-height: 67px;
     text-align: center;
@@ -85,6 +82,17 @@ body {
               padding-top: 0;
               padding-bottom: 0;
           }
+          #header h1 {
+              display: block;
+              position: relative;
+              text-align: center;
+          }
+          #header ul {
+              display: block;
+              position: relative;
+              margin: 0 auto;
+              text-align: center;
+          }
           #content {
               width: 100%;
               margin: 0;
@@ -99,7 +107,7 @@ body {
   </head><body>
     <div id="header-container">
       <div id="header">
-        <a href="/"><h1>DawdleRPG</h1></a>
+        <h1><a href="/">DawdleRPG</a></h1>
         <ul>
           <a href="{% url 'dawdle:about' %}"><li>About</li></a>
           <a href="{% url 'dawdle:player-list' %}"><li>Players</li></a>
