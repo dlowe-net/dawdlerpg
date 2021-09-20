@@ -135,7 +135,7 @@ def start_bot():
     db = bot.GameDB(store)
     if db.exists():
         db.backup_store()
-        db.load_players()
+        db.load_state()
 
     if db.count_players() == 0:
         first_setup(db)

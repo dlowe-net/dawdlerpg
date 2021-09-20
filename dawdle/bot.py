@@ -58,6 +58,14 @@ def datapath(path):
     return os.path.join(conf.get("datadir"), path)
 
 
+def grouper(iterable, n):
+    """Collect data into fixed-length chunks or blocks
+
+    grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
+    """
+    return [iterable[i:i+n] for i in range(0, len(iterable), n)]
+
+
 def CC(color):
     """Return color code if colors are enabled."""
     if not conf.get("color"):
@@ -123,6 +131,7 @@ class Player(object):
         p = cls()
         for k,v in d.items():
             setattr(p, k, v)
+        p.items = dict()
         return p
 
     @staticmethod
@@ -273,6 +282,10 @@ class GameStorage(object):
 
     def add_history(self, pname, text):
         """Adds history text for the player."""
+        pass
+
+    def read_quest(self):
+        """Returns stored quest object or None."""
         pass
 
     def update_quest(self, quest):
@@ -461,6 +474,34 @@ class IdleRPGGameStorage(GameStorage):
             ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
 
 
+    def read_quest(self):
+        """Returns stored Quest object or None."""
+        if not conf.get("writequestfile"):
+            return None
+        if os.path.stat(datapath(conf.get("questfilename"))).st_len == 0:
+            return None
+
+        with open(datapath(conf.get("questfilename"))) as inf:
+            q = Quest()
+            for line in inf.readlines():
+                key, val = line.split(' ', 2)
+                if key == "T":
+                    q.text = val
+                elif key == "Y":
+                    q.mode = int(val)
+                elif key == "S":
+                    if q.mode == 1:
+                        q.qtime = int(val)
+                    else:
+                        q.stage = int(val)
+                elif key == "P":
+                    for pair in grouper(val.split(' ')):
+                        q.dests.append((p[0], p[1]))
+                elif re.match("P\d", key):
+                    q.questor_names.append(val)
+            return q
+
+
     def update_quest(self, quest):
         """Updates quest information in store."""
         if not conf.get("writequestfile"):
@@ -476,8 +517,8 @@ class IdleRPGGameStorage(GameStorage):
             if quest.mode == 1:
                 ouf.write(f"S {quest.qtime}\n")
             elif quest.mode == 2:
-                ouf.write(f"S {quest.stage:2d}\n"
-                          f"P {' '.join([' '.join(str(p)) for p in quest.dests])}\n")
+                ouf.write(f"S {quest.stage:d}\n"
+                          f"P {' '.join([' '.join([str(c) for c in p]) for p in quest.dests])}\n")
 
             ouf.write(f"P1 {quest.questors[0].name}\n"
                       f"P2 {quest.questors[1].name}\n"
@@ -613,6 +654,25 @@ class Sqlite3GameStorage(GameStorage):
             cur.commit()
 
 
+    def read_quest(self):
+        with self._connect() as cur:
+            cur = cur.execute("select * from dawdle_quest")
+            res = cur.fetchone()
+            if not res or res['mode'] == 0:
+                return None
+            q = Quest()
+            q.questor_names = [res['p1'], res['p2'], res['p3'], res['p4']]
+            q.text = res['text']
+            q.mode = res['mode']
+            if q.mode == 1:
+                q.qtime = res['qtime']
+            if q.mode == 2:
+                q.stage = int(res['stage'])
+                q.dests = [(int(res['dest1x']), int(res['dest1y'])), (int(res['dest2x']), int(res['dest2y']))]
+
+            return q
+
+
     def update_quest(self, quest):
         """Updates quest information in store."""
         with self._connect() as cur:
@@ -682,10 +742,13 @@ class GameDB(object):
         self._store.backup()
 
 
-    def load_players(self):
+    def load_state(self):
         """Load all players from database into memory"""
         for p in self._store.readall():
             self._players[p.name] = p
+        self._quest = self._store.read_quest()
+        if self._quest:
+            self._quest.questors = [self._players[pname] for pname in self._quest.questor_names]
 
 
     def write_players(self, players=None):
@@ -701,8 +764,6 @@ class GameDB(object):
             raise KeyError
 
         p = Player.new_player(pname, pclass, ppass, conf.get("rpbase"))
-        p.posx = self.randint(0, conf.get("mapx"))
-        p.posy = self.randint(0, conf.get("mapy"))
         self._players[pname] = p
         self._store.new(p)
 
@@ -780,8 +841,10 @@ SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlsp
 
 class Quest(object):
     """Class for tracking quests."""
-    def __init__(self, qp):
-        self.questors = qp
+    def __init__(self):
+        # TODO: This is an ugly hack to support deserialization.
+        self.questor_names = []
+        self.questors = None
         self.mode = None
         self.text = None
         self.qtime = None
@@ -1245,6 +1308,9 @@ class DawdleBot(object):
             player.online = True
             player.nick = nick
             player.userhost = self._irc._users[nick].userhost
+            player.posx = self.randint("new_player_posy", 0, conf.get("mapx"))
+            player.posy = self.randint("new_player_posy", 0, conf.get("mapy"))
+
             if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.grant_voice(nick)
             self.chanmsg(f"Welcome {nick}'s new player {C('name', pname)}, the {pclass}!  Next level in {duration(player.nextlvl)}.")
@@ -2094,7 +2160,8 @@ class DawdleBot(object):
                  re.match(r'(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
         if not match:
             return
-        self._quest = Quest(qp)
+        self._quest = Quest()
+        self._quest.questors = qp
         if match[1] == '1':
             quest_time = self.randint('quest_time', 6, 12)*3600
             self._quest.mode = 1
@@ -2115,6 +2182,7 @@ class DawdleBot(object):
                          f"been chosen by the gods to {self._quest.text}.  Participants must first "
                          f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
                          f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
+        self._db.update_quest(self._quest)
 
 
     def quest_check(self, now):

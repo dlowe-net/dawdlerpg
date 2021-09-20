@@ -22,7 +22,7 @@
           <td>Alignment:</td><td><span class="{{player.alignment|alignment}}-align">{{player.alignment|alignment}}</span></td>
         </tr>
     </tbody></table>
-    <img src="{% url 'dawdle:map' player.name %}" alt="Player Map" usemap="#playermap">
+    <img src="{% url 'dawdle:player-map' player.name %}" alt="Player Map" usemap="#playermap">
     <map name="playermap">
       <area shape="circle"
             coords="{{player.posx}},{{player.posy}},3"

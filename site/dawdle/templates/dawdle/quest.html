@@ -4,16 +4,24 @@
 {% load alignment %}
 
 {% block content %}
-  <div class="contentbox">
-    <h1>Players</h1>
+<div class="contentbox">
+  {% if quest and quest.mode != 0%}
+  <h1>The sacred quest to {{quest.text}}</h1>
 
-    <table id="playerlist">
+  {% if quest.mode == 1 %}
+  <p>Time left in quest: {{quest.qtime|duration}}</p>
+  {% elif quest.stage == 1 %}
+  <p>Questor's next destination: ({{quest.dest1x}}, {{quest.dest1y}})</p>
+  {% else %}
+  <p>Questor's next destination: ({{quest.dest2x}}, {{quest.dest2y}})</p>
+  {% endif %}
+
+      <table id="playerlist">
       <thead>
-        <tr><td>Rank</td><td style="width:30rem">Name</td><td>Time to next level</td></tr>
+        <tr><td style="width:30rem">Questor</td><td>Time to next level</td></tr>
       </thead><tbody>
-        {% for p in object_list %}
+        {% for p in questors %}
         <tr class="{%if p.online %}online{% else %}offline{% endif %}">
-          <td style="text-align:right">#{{forloop.counter}}</td>
           <td><img style="height: 0.7em; width: 0.7em"
                                              src="{% if p.online %}
                                                   {% static 'dawdle/Blue_sphere.svg' %}
@@ -32,18 +40,24 @@
           <td style="text-align: right"2>{{p.nextlvl|duration}}</td>
         </tr>
         {% endfor %}
-    </tbody></table>
+      </tbody></table>
 
-    <div id="pmap-container">
-      <img id="pmap" src="{% url 'dawdle:map' %}" alt="Player Map" usemap="#playermap">
-    </div>
-    <map name="playermap">
-      {% for p in object_list %}
-      <area shape="circle"
-            coords="{{p.posx}},{{p.posy}},3"
-            alt="{{p.name}}"
-            href="{% url 'dawdle:player-detail' p.name %}">
-      {% endfor %}
-    </map>
-  </div>
+      <div id="pmap-container">
+        <img id="pmap" src="{% url 'dawdle:map' %}" alt="Player Map" usemap="#playermap">
+      </div>
+      <map name="playermap">
+        {% for p in questors %}
+        <area shape="circle"
+              coords="{{p.posx}},{{p.posy}},3"
+              alt="{{p.name}}"
+              href="{% url 'dawdle:player-detail' p.name %}">
+        {% endfor %}
+      </map>
+
+      {% else %}
+      <h1>No current quest</h1>
+      <p>There is no decreed quest at this time.</p>
+  {% endif %}
+</div>
+
 {% endblock %}

@@ -21,7 +21,7 @@ class TestGameDBSqlite3(unittest.TestCase):
             p.online = True
             db.write_players()
             self.assertTrue(db.exists())
-            db.load_players()
+            db.load_state()
             self.assertEqual(db['foo'].name, 'foo')
             self.assertEqual(db['foo'].online, True)
             db.close()
@@ -48,7 +48,7 @@ class TestGameDBIdleRPG(unittest.TestCase):
             op.items['amulet'] = bot.Item(55, '')
             op.items['helm'] = bot.Item(42, "Jeff's Cluehammer of Doom")
             db.write_players()
-            db.load_players()
+            db.load_state()
             p = db['foo']
             self.maxDiff = None
             self.assertEqual(vars(op), vars(p))
