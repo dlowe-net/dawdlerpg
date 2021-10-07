@@ -67,7 +67,7 @@ class MapView(View):
 
 class PlayerListView(generic.ListView):
     model = Player
-    queryset = Player.objects.order_by('level', 'nextlvl')
+    queryset = Player.objects.order_by('-level', 'nextlvl')
 
 
 class PlayerDetailView(generic.DetailView):
