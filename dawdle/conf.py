@@ -32,6 +32,7 @@ def parse_val(s):
 def read_config(path):
     """Return dict with contents of configuration file."""
     newconf = {
+        "setup": False,
         "servers": [],
         "okurls": [],
         "localaddr": None,
@@ -98,10 +99,15 @@ def init():
     global _conf
     parser = argparse.ArgumentParser(description="IdleRPG clone")
     parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
+    parser.add_argument("--setup", type=bool, default=False, help="Begin initial setup.")
+    parser.add_argument("--migrate", help="Migrate game to slqite3 db at path.")
     parser.add_argument("config_file", help="Path to configuration file.  You must specify this.")
 
     args = parser.parse_args()
     _conf.update(read_config(args.config_file))
+
+    _conf['setup'] = args.setup
+    _conf['migrate'] = args.migrate
 
     # override configurations from command line
     server_overrides = []

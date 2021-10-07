@@ -280,8 +280,8 @@ class GameStorage(object):
         """Removes a player from the store."""
         pass
 
-    def add_history(self, pname, text):
-        """Adds history text for the player."""
+    def add_history(self, players, text):
+        """Adds history text for the players."""
         pass
 
     def read_quest(self):
@@ -463,7 +463,7 @@ class IdleRPGGameStorage(GameStorage):
         self.write([])
 
 
-    def add_history(self, players, text):
+    def add_history(self, pnames, text):
         """Adds history text for the player.
 
         IdleRPG dumps all history into a single modsfile, which is
@@ -478,7 +478,7 @@ class IdleRPGGameStorage(GameStorage):
         """Returns stored Quest object or None."""
         if not conf.get("writequestfile"):
             return None
-        if os.path.stat(datapath(conf.get("questfilename"))).st_len == 0:
+        if os.stat(datapath(conf.get("questfilename"))).st_size == 0:
             return None
 
         with open(datapath(conf.get("questfilename"))) as inf:
@@ -544,7 +544,7 @@ class Sqlite3GameStorage(GameStorage):
     def _connect(self):
         """Connects to the sqlite3 db if not already connected."""
         if self._db is None:
-            self._db = sqlite3.connect(datapath(self._dbpath))
+            self._db = sqlite3.connect(self._dbpath)
             self._db.row_factory = Sqlite3GameStorage.dict_factory
 
         return self._db
@@ -559,9 +559,9 @@ class Sqlite3GameStorage(GameStorage):
         """Initializes a new db."""
         with self._connect() as cur:
             cur.execute(f"create table dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)})")
-            cur.execute('create table dawdle_item (owner_id, slot, level, name, CONSTRAINT "unique_item_owner_slot" UNIQUE ("owner_id", "slot"))')
-            cur.execute("create table dawdle_history (player, time, text)")
-            cur.execute("create table dawdle_quest (mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
+            cur.execute('create table dawdle_item (id, owner_id, slot, level, name, CONSTRAINT "unique_item_owner_slot" UNIQUE ("owner_id", "slot"))')
+            cur.execute("create table dawdle_history (id, owner_id, time, text)")
+            cur.execute("create table dawdle_quest (id, mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
             cur.execute("insert into dawdle_quest (mode) values (0)")
 
 
@@ -607,8 +607,9 @@ class Sqlite3GameStorage(GameStorage):
     def write(self, players):
         """Writes player information into the db."""
         with self._connect() as cur:
-            update_fields = ",".join(f"{k}=:{k}" for k in Sqlite3GameStorage.FIELDS)
-            cur.executemany(f"update dawdle_player set {update_fields} where name=:name",
+            sql_fields = ",".join(Sqlite3GameStorage.FIELDS)
+            p_fields = ",".join([":"+k for k in Sqlite3GameStorage.FIELDS])
+            cur.executemany(f"replace into dawdle_player ({sql_fields}) values ({p_fields})",
                             [vars(p) for p in players])
             item_updates = []
             for p in players:
@@ -646,12 +647,17 @@ class Sqlite3GameStorage(GameStorage):
             cur.commit()
 
 
-    def add_history(self, players, text):
+    def bulk_history_insert(self, history):
+        """Inserts (owner, time, text) tuples into history db."""
+        with self._connect() as cur:
+            cur.executemany("insert into dawdle_history (owner_id, time, text) values (?, datetime(?), ?)", history)
+
+
+    def add_history(self, pnames, text, time='now'):
         """Adds history text for the player."""
         with self._connect() as cur:
-            for p in players:
-                cur.execute("insert into dawdle_history (owner_id, time, text) values (?, datetime('now'), ?)", (p.name, text))
-            cur.commit()
+            cur.executemany("insert into dawdle_history (owner_id, time, text) values (?, datetime(?), ?)",
+                            [(pname, time, text) for pname in pnames])
 
 
     def read_quest(self):
@@ -796,7 +802,7 @@ class GameDB(object):
 
     def add_history(self, players, text):
         """Add text to the players' history."""
-        self._store.add_history(players, text)
+        self._store.add_history([p.name for p in players], text)
 
 
     def update_quest(self, quest):

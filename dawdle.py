@@ -19,10 +19,12 @@ import atexit
 import logging
 import os
 import os.path
+import re
 import resource
 import signal
 import sys
 import termios
+import time
 
 from dawdle import bot
 from dawdle import conf
@@ -130,15 +132,52 @@ def start_bot():
         store = bot.Sqlite3GameStorage(bot.datapath(conf.get("dbfile")))
     else:
         sys.stderr.write(f"Invalid configuration store_format={conf.get('store_format')}.  Configuration must be idlerpg or sqlite3.")
-        sys.exit(1)
+        sys.exit(255)
 
     db = bot.GameDB(store)
     if db.exists():
         db.backup_store()
         db.load_state()
 
-    if db.count_players() == 0:
+    if conf.get("setup"):
         first_setup(db)
+        sys.exit(0)
+
+    if conf.get("migrate"):
+        new_store = bot.Sqlite3GameStorage(conf.get("migrate"))
+        if new_store.exists():
+            new_store.clear()
+        else:
+            new_store.create()
+        print(f"Writing {db.count_players()} players.")
+        new_store.write(db._players.values())
+        print(f"Writing quest.")
+        new_store.update_quest(db._quest)
+        # Update history from modsfile.
+        print(f"Writing history.")
+        names = set(db._players.keys())
+        history = []
+        with open(bot.datapath(conf.get("modsfile")), "rb") as inf:
+            for line in inf.readlines():
+                try:
+                    line = str(line, encoding='utf8')
+                except UnicodeDecodeError:
+                    line = str(line, encoding='latin-1')
+
+                mon, day, year, timeofday, text = re.match(r'\[(\d\d)/(\d\d)/(\d\d) (.*?)\] (.*)', line).groups()
+                for word in re.findall(r"\w+", text):
+                    if word in names:
+                        history.append((word, f"20{year}-{mon}-{day} {timeofday}", text))
+            if len(history) > 10000:
+                new_store.bulk_history_insert(history)
+                history = []
+        new_store.bulk_history_insert(history)
+        print("Done.")
+        sys.exit(0)
+
+    if db.count_players() == 0:
+        sys.stderr.write(f"Zero players in {conf.get('dbfile')}.  Do you need to run with --setup?")
+        sys.exit(255)
 
     if conf.has("pidfile"):
         check_pidfile(bot.datapath(conf.get("pidfile")))
