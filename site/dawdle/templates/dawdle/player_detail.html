@@ -64,7 +64,7 @@
     </div><div class="contentbox">
     <h2>History</h2>
     <ul>
-    {% for event in player.history_set.all|dictsort:"time" %}
+    {% for event in player.history_set.all|dictsortreversed:"time" %}
     <li>{{event.time}}: {{event.text}}</li>
     {% endfor %}
     </ul>
