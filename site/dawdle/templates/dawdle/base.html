@@ -120,10 +120,6 @@ body {
 #playerlist td {
   padding: 0.1rem 1rem;
 }
-#playerlist a:hover {
-  color: blue;
-  text-decoration: underline;
-}
 #pmap-container {
   display: inline-block;
   padding: 1rem;
@@ -133,11 +129,19 @@ body {
   text-decoration: none;
   color: black;
 }
+.online a:hover {
+  color: black;
+  text-decoration: underline;
+}
 .offline {
   color: gray;
 }
-.online a:hover {
-  color: blue;
+.offline a {
+  text-decoration: none;
+  color: gray;
+}
+.offline a:hover {
+  color: gray;
   text-decoration: underline;
 }
 {% block extrastyles %}{% endblock %}
