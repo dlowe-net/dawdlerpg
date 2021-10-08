@@ -140,7 +140,7 @@ class IRCClient:
 
     async def flushq_task(self):
         """Flush send queue and release throttle."""
-        await asyncio.sleep(THROTTLE_PERIOD)
+        await asyncio.sleep(conf.get("throttle_period"))
         self._messages_sent = max(0, self._messages_sent - conf.get("throttle_rate"))
         while self._writeq:
             while self._writeq and self._messages_sent < conf.get("throttle_rate"):
