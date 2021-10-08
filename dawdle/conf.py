@@ -2,8 +2,9 @@ import argparse
 import logging
 import os.path
 import re
+import sys
 
-import dawdle.log
+from dawdle.log import log
 
 DURATION_RE = re.compile(r"(\d+)([dhms])")
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
@@ -99,7 +100,7 @@ def init():
     global _conf
     parser = argparse.ArgumentParser(description="IdleRPG clone")
     parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
-    parser.add_argument("--setup", type=bool, default=False, help="Begin initial setup.")
+    parser.add_argument("--setup", default=False, action="store_true", help="Begin initial setup.")
     parser.add_argument("--migrate", help="Migrate game to slqite3 db at path.")
     parser.add_argument("config_file", help="Path to configuration file.  You must specify this.")
 
