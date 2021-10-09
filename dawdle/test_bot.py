@@ -41,9 +41,13 @@ class TestGameDBSqlite3(unittest.TestCase):
 
 class TestGameDBIdleRPG(unittest.TestCase):
     def test_db(self):
+        conf._conf['botnick'] = ''
+        conf._conf['writequestfile'] = True
+        conf._conf['questfilename'] = "/tmp/testquestfile.txt"
         with tempfile.TemporaryDirectory() as tmpdir:
             db = bot.GameDB(bot.IdleRPGGameStorage(os.path.join(tmpdir, 'dawdle_test.db')))
             db.create()
+            db.update_quest(None)
             op = db.new_player('foo', 'bar', 'baz')
             op.items['amulet'] = bot.Item(55, '')
             op.items['helm'] = bot.Item(42, "Jeff's Cluehammer of Doom")
