@@ -1,0 +1,12 @@
+[Unit]
+Description=DawdleRPG IRC Bot
+After=network.target auditd.service
+
+[Service]
+ExecStart=DAWDLERPG_DIR/dawdle.py -o daemonize=off DAWDLERPG_DIR/data/dawdle.conf
+Restart=on-failure
+RestartPreventExitStatus=255
+type=simple
+
+[Install]
+WantedBy=multi-user.target

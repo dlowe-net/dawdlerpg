@@ -25,7 +25,7 @@ SECRET_KEY = 'x!q4ob0#-)i&$ddve$r_%9t50tufe$hv-poo$v6wq-9fv_u88^'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['home.dlowe.net', 'pattern.lan', 'pattern', 'localhost', '192.168.122.122']
 
 
 # Application definition

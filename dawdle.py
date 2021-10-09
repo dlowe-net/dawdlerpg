@@ -35,7 +35,7 @@ import dawdle.log as dawdlelog
 
 def first_setup(db):
     """Perform initialization of game."""
-    pname = input(f"{bot.datapath(conf.get('dbfile'))} does not appear to exist.  I'm guessing this is your first time using DawdleRPG. Please give an account name that you would like to have admin access [{conf.get('owner')}]: ")
+    pname = input(f"Initializing dbfile {bot.datapath(conf.get('dbfile'))}.  Give an account name that you would like to have admin access [{conf.get('owner')}]: ")
     if pname == "":
         pname = conf.get("owner")
     pclass = input("Enter a character class for this account: ")
@@ -49,7 +49,9 @@ def first_setup(db):
     finally:
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old)
 
-    if not db.exists():
+    if db.exists():
+        db.clear()
+    else:
         db.create()
     p = db.new_player(pname, pclass, ppass)
     p.isadmin = True
@@ -134,14 +136,19 @@ def start_bot():
         sys.stderr.write(f"Invalid configuration store_format={conf.get('store_format')}.  Configuration must be idlerpg or sqlite3.")
         sys.exit(255)
 
-    db = bot.GameDB(store)
-    if db.exists():
-        db.backup_store()
-        db.load_state()
-
     if conf.get("setup"):
-        first_setup(db)
+        if store.exists():
+            store.clear()
+        first_setup(bot.GameDB(store))
         sys.exit(0)
+
+    db = bot.GameDB(store)
+    if not db.exists():
+        sys.stderr.write("Game db doesn't exist.  Run with --setup.")
+        sys.exit(22)
+
+    db.backup_store()
+    db.load_state()
 
     if conf.get("migrate"):
         new_store = bot.Sqlite3GameStorage(conf.get("migrate"))

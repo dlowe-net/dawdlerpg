@@ -1,0 +1,33 @@
+# DawdleRPG nginx configuration
+server {
+	listen 80 default_server;
+	listen [::]:80 default_server;
+
+	# SSL configuration
+	#
+	# listen 443 ssl default_server;
+	# listen [::]:443 ssl default_server;
+	# gzip off
+	#
+
+	root DAWDLERPG_DIR/site/static;
+	charset utf-8;
+	server_name _;
+
+	location /media {
+		alias DAWDLERPG_DIR/site/media;
+	}
+	location /static {
+		alias DAWDLERPG_DIR/site/static;
+	}
+	location /favicon.ico {
+		alias DAWDLERPG_DIR/site/static/favicon.ico;
+	}
+	location /robots.txt {
+		alias DAWDLERPG_DIR/site/static/robots.txt;
+	}
+	location / {
+		uwsgi_pass unix:///tmp/dawdlerpg-uwsgi.sock;
+  		include uwsgi_params;
+	}
+}

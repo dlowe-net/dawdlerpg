@@ -1,0 +1,13 @@
+[Unit]
+Description=uWSGI Service
+After=network.target auditd.service
+
+[Service]
+EnvironmentFile=-/etc/default/uwsgi
+ExecStart=/usr/local/bin/uwsgi --ini /etc/uwsgi.ini
+Restart=on-failure
+RestartPreventExitStatus=255
+type=notify
+
+[Install]
+WantedBy=multi-user.target
