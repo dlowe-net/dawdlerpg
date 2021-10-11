@@ -29,6 +29,7 @@ import time
 from hmac import compare_digest as compare_hash
 
 from dawdle import conf
+from dawdle import rand
 from dawdle.log import log
 
 VERSION = "1.0.0"
@@ -915,43 +916,6 @@ class DawdleBot(object):
         self._overrides = {}
 
 
-    def randomly(self, key, odds):
-        """Overrideable random func which returns true at 1:ODDS odds."""
-        if key in self._overrides:
-            return self._overrides[key]
-        return random.randint(0, odds-1) < 1
-
-
-    def randint(self, key, bottom, top):
-        """Overrideable random func which returns an integer bottom <= i <= top."""
-        if key in self._overrides:
-            return self._overrides[key]
-        return random.randint(bottom, top)
-
-
-    def randsample(self, key, seq, count):
-        """Overrideable random func which returns random COUNT elements of SEQ."""
-        if key in self._overrides:
-            return self._overrides[key]
-        return random.sample(seq, count)
-
-
-    def randchoice(self, key, seq):
-        """Overrideable random func which returns one random element of SEQ."""
-        if key in self._overrides:
-            return self._overrides[key]
-        # Don't use random.choice here - it uses random access, which
-        # is unsupported by the dict_keys view.
-        return random.sample(seq, 1)[0]
-
-
-    def randshuffle(self, key, seq):
-        """Overrideable random func which does an in-place shuffle of SEQ."""
-        if key in self._overrides:
-            return self._overrides[key]
-        random.shuffle(seq)
-
-
     def connected(self, irc):
         """Called when connected to IRC."""
         self._irc = irc
@@ -1001,7 +965,7 @@ class DawdleBot(object):
         else:
             self.chanmsg("0 users qualified for auto login.")
         self._gametick_task = asyncio.create_task(self.gametick_loop())
-        self._qtimer = time.time() + self.randint('qtimer_init',
+        self._qtimer = time.time() + rand.randint('qtimer_init',
                                                   conf.get("quest_interval_min"),
                                                   conf.get("quest_interval_max"))
 
@@ -1314,8 +1278,8 @@ class DawdleBot(object):
             player.online = True
             player.nick = nick
             player.userhost = self._irc._users[nick].userhost
-            player.posx = self.randint("new_player_posy", 0, conf.get("mapx"))
-            player.posy = self.randint("new_player_posy", 0, conf.get("mapy"))
+            player.posx = rand.randint("new_player_posy", 0, conf.get("mapx"))
+            player.posy = rand.randint("new_player_posy", 0, conf.get("mapy"))
 
             if conf.get("voiceonlogin") and self._irc.bot_has_ops():
                 self._irc.grant_voice(nick)
@@ -1615,7 +1579,7 @@ class DawdleBot(object):
             self.goodness(self._db.online_players())
         elif args == 'battle':
             self.chanmsg(f"{C('name', player.name)} has called forth a gladitorial arena.")
-            self.challenge_opp(self.randchoice('triggered_battle', self._db.online_players()))
+            self.challenge_opp(rand.choice('triggered_battle', self._db.online_players()))
         elif args == 'quest':
             self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             if self._quest:
@@ -1748,17 +1712,17 @@ class DawdleBot(object):
                 good_count += 1
 
         day_ticks = 86400/conf.get("self_clock")
-        if self.randint('hog_trigger', 0, 20 * day_ticks) < online_count:
+        if rand.randint('hog_trigger', 0, 20 * day_ticks) < online_count:
             self.hand_of_god(op)
-        if self.randint('team_battle_trigger', 0, 24 * day_ticks) < online_count:
+        if rand.randint('team_battle_trigger', 0, 24 * day_ticks) < online_count:
             self.team_battle(op)
-        if self.randint('calamity_trigger', 0, 8 * day_ticks) < online_count:
+        if rand.randint('calamity_trigger', 0, 8 * day_ticks) < online_count:
             self.calamity()
-        if self.randint('godsend_trigger', 0, 4 * day_ticks) < online_count:
+        if rand.randint('godsend_trigger', 0, 4 * day_ticks) < online_count:
             self.godsend()
-        if self.randint('evilness_trigger', 0, 8 * day_ticks) < evil_count:
+        if rand.randint('evilness_trigger', 0, 8 * day_ticks) < evil_count:
             self.evilness(op)
-        if self.randint('goodness_trigger', 0, 12 * day_ticks) < good_count:
+        if rand.randint('goodness_trigger', 0, 12 * day_ticks) < good_count:
             self.goodness(op)
 
         self.move_players()
@@ -1777,7 +1741,7 @@ class DawdleBot(object):
         # high level players fight each other randomly
         hlp = [p for p in op if p.level >= 45]
         if now % 3600 == 0 and len(hlp) > len(op) * 0.15:
-            self.challenge_opp(self.randchoice('pvp_combat', hlp))
+            self.challenge_opp(rand.choice('pvp_combat', hlp))
 
         # periodic warning about pause mode
         if now % 600 == 0 and self._pause:
@@ -1797,7 +1761,7 @@ class DawdleBot(object):
                 self.chanmsg(f"{C('name', player.name)}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 self.find_item(player)
                 # Players below level 25 have fewer battles.
-                if player.level >= 25 or self.randomly('lowlevel_battle', 4):
+                if player.level >= 25 or rand.randomly('lowlevel_battle', 4):
                     self.challenge_opp(player)
 
         self._db.write_players(op)
@@ -1805,9 +1769,9 @@ class DawdleBot(object):
 
     def hand_of_god(self, op):
         """Hand of God that pushes a random player forword or back."""
-        player = self.randchoice('hog_player', op)
-        amount = int(player.nextlvl * (5 + self.randint('hog_amount', 0, 71))/100)
-        if self.randomly('hog_effect', 5):
+        player = rand.choice('hog_player', op)
+        amount = int(player.nextlvl * (5 + rand.randint('hog_amount', 0, 71))/100)
+        if rand.randomly('hog_effect', 5):
             self.logchanmsg([player], f"Thereupon He stretched out His little finger among them and consumed {C('name', player.name)} with fire, slowing the heathen {duration(amount)} from level {player.level + 1}.")
             player.nextlvl += amount
         else:
@@ -1845,23 +1809,19 @@ class DawdleBot(object):
                                      "mind... even as you relieve them of it.")]
 
         for si in special_items:
-            if player.level >= si.minlvl and self.randomly('specitem_find', 40):
-                ilvl = si.itemlvl + self.randint('specitem_level', 0, si.lvlspread)
+            if player.level >= si.minlvl and rand.randomly('specitem_find', 40):
+                ilvl = si.itemlvl + rand.randint('specitem_level', 0, si.lvlspread)
                 player.acquire_item(si.kind, ilvl, si.name)
                 self.notice(player.nick,
                                  f"The light of the gods shines down upon you! You have "
                                  f"found the {C('item')}level {ilvl} {si.name}{C()}!  {si.flavor}")
                 return
 
-        slot = self.randchoice('find_item_slot', Item.SLOTS)
-        level = 0
-        if 'find_item_level' in self._overrides:
-            level = self._overrides['find_item_level']
-        else:
-            level = 0
-            for num in range(1, int(player.level * 1.5)):
-                if self.randomly('find_item_level_ok', int(1.4**(num / 4))):
-                    level = num
+        slot = rand.choice('find_item_slot', Item.SLOTS)
+        level = rand.gauss('find_item_level',
+                           player.level,
+                           player.level / 5)
+
         old_level = player.item_level(slot)
         if level > old_level:
             self.notice(player.nick,
@@ -1887,8 +1847,8 @@ class DawdleBot(object):
             oppsum = opp.battleitemsum()
 
         playersum = player.battleitemsum()
-        playerroll = self.randint('pvp_player_roll', 0, playersum)
-        opproll = self.randint('pvp_opp_roll', 0, oppsum)
+        playerroll = rand.randint('pvp_player_roll', 0, playersum)
+        opproll = rand.randint('pvp_opp_roll', 0, oppsum)
         if playerroll >= opproll:
             gain = 20 if opp is None else max(7, int(opp.level / 4))
             amount = int((gain / 100)*player.nextlvl)
@@ -1899,14 +1859,14 @@ class DawdleBot(object):
             if player.nextlvl > 0:
                 self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
             if opp is not None:
-                if self.randomly('pvp_critical', {'g': 50, 'n': 35, 'e': 20}[player.alignment]):
-                    penalty = int(((5 + self.randint('pvp_cs_penalty_pct', 0, 20))/100 * opp.nextlvl))
+                if rand.randomly('pvp_critical', {'g': 50, 'n': 35, 'e': 20}[player.alignment]):
+                    penalty = int(((5 + rand.randint('pvp_cs_penalty_pct', 0, 20))/100 * opp.nextlvl))
                     self.logchanmsg([opp], f"{C('name', player.name)} has dealt {C('name', opp.name)} a {CC('red')}Critical Strike{C()}! "
                                     f"{duration(penalty)} is added to {C('name', opp.name)}'s clock.")
                     opp.nextlvl += penalty
                     self.chanmsg(f"{C('name', opp.name)} reaches next level in {duration(opp.nextlvl)}.")
-                elif player.level > 19 and self.randomly('pvp_swap_item', 25):
-                    slot = self.randchoice('pvp_swap_itemtype', Item.SLOTS)
+                elif player.level > 19 and rand.randomly('pvp_swap_item', 25):
+                    slot = rand.choice('pvp_swap_itemtype', Item.SLOTS)
                     playeritem = player.item_level(slot)
                     oppitem = opp.item_level(slot)
                     if oppitem > playeritem:
@@ -1924,7 +1884,7 @@ class DawdleBot(object):
             player.nextlvl += amount
             self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
-        if self.randomly('pvp_find_item', {'g': 50, 'n': 67, 'e': 100}[player.alignment]):
+        if rand.randomly('pvp_find_item', {'g': 50, 'n': 67, 'e': 100}[player.alignment]):
             self.logchanmsg([player], f"While recovering from battle, {C('name', player.name)} notices a glint "
                          f"in the mud. Upon investigation, they find an old lost item!")
             self.find_item(player)
@@ -1935,19 +1895,19 @@ class DawdleBot(object):
         op = self._db.online_players()
         op.remove(player)       # Let's not fight ourselves
         op.append(None)         # This is the bot opponent
-        self.pvp_battle(player, self.randchoice('challenge_opp_choice', op), 'challenged', 'and won', 'and lost')
+        self.pvp_battle(player, rand.choice('challenge_opp_choice', op), 'challenged', 'and won', 'and lost')
 
 
     def team_battle(self, op):
         """Have a 3-vs-3 battle between teams."""
         if len(op) < 6:
             return
-        op = self.randsample('team_battle_members', op, 6)
+        op = rand.sample('team_battle_members', op, 6)
         team_a = sum([p.battleitemsum() for p in op[0:3]])
         team_b = sum([p.battleitemsum() for p in op[3:6]])
         gain = int(min([p.nextlvl for p in op[0:6]]) * 0.2)
-        roll_a = self.randint('team_a_roll', 0, team_a)
-        roll_b = self.randint('team_b_roll', 0, team_b)
+        roll_a = rand.randint('team_a_roll', 0, team_a)
+        roll_b = rand.randint('team_b_roll', 0, team_b)
         if roll_a >= roll_b:
             self.logchanmsg(op[0:3], f"{C('name', op[0].name)}, {C('name', op[1].name)}, and {C('name', op[2].name)} [{roll_a}/{team_a}] "
                             f"have team battled {C('name', op[3].name)}, {C('name', op[4].name)}, and {C('name', op[5].name)} "
@@ -1964,13 +1924,13 @@ class DawdleBot(object):
 
     def calamity(self):
         """Bring bad things to a random player."""
-        player = self.randchoice('calamity_target', self._db.online_players())
+        player = rand.choice('calamity_target', self._db.online_players())
         if not player:
             return
 
-        if player.items and self.randomly('calamity_item_damage', 10):
+        if player.items and rand.randomly('calamity_item_damage', 10):
             # Item damaging calamity
-            slot = self.randchoice('calamity_slot', player.items.keys())
+            slot = rand.choice('calamity_slot', player.items.keys())
             if slot == "ring":
                 msg = f"{C('name', player.name)} accidentally smashed their {C('item', 'ring')} with a hammer!"
             elif slot == "amulet":
@@ -1996,9 +1956,9 @@ class DawdleBot(object):
             return
 
         # Level setback calamity
-        amount = int(self.randint('calamity_setback_pct', 5, 13) / 100 * player.nextlvl)
+        amount = int(rand.randint('calamity_setback_pct', 5, 13) / 100 * player.nextlvl)
         player.nextlvl += amount
-        action = self.randchoice('calamity_action', self._events["C"])
+        action = rand.choice('calamity_action', self._events["C"])
         self.logchanmsg([player], f"{C('name', player.name)} {action}! This terrible calamity has slowed them "
                         f"{duration(amount)} from level {player.level + 1}.")
         if player.nextlvl > 0:
@@ -2007,13 +1967,13 @@ class DawdleBot(object):
 
     def godsend(self):
         """Bring good things to a random player."""
-        player = self.randchoice('godsend_target', self._db.online_players())
+        player = rand.choice('godsend_target', self._db.online_players())
         if not player:
             return
 
-        if player.items and self.randomly('godsend_item_improve', 10):
+        if player.items and rand.randomly('godsend_item_improve', 10):
             # Item improving godsend
-            slot = self.randchoice('godsend_slot', player.items.keys())
+            slot = rand.choice('godsend_slot', player.items.keys())
             if slot == "ring":
                 msg = f"{C('name', player.name)} dipped their {C('item', 'ring')} into a sacred fountain!"
             elif slot == "amulet":
@@ -2040,9 +2000,9 @@ class DawdleBot(object):
             return
 
         # Level godsend
-        amount = int(self.randint('godsend_amount_pct', 5, 13) / 100 * player.nextlvl)
+        amount = int(rand.randint('godsend_amount_pct', 5, 13) / 100 * player.nextlvl)
         player.nextlvl -= amount
-        action = self.randchoice('godsend_action', self._events["G"])
+        action = rand.choice('godsend_action', self._events["G"])
         self.logchanmsg([player], f"{C('name', player.name)} {action}! This wondrous godsend has accelerated them "
                         f"{duration(amount)} towards level {player.level + 1}.")
         if player.nextlvl > 0:
@@ -2054,12 +2014,12 @@ class DawdleBot(object):
         evil_p = [p for p in op if p.alignment == 'e']
         if not evil_p:
             return
-        player = self.randchoice('evilness_player', evil_p)
-        if self.randomly('evilness_theft', 2):
-            target = self.randchoice('evilness_target', [p for p in op if p.alignment == 'g'])
+        player = rand.choice('evilness_player', evil_p)
+        if rand.randomly('evilness_theft', 2):
+            target = rand.choice('evilness_target', [p for p in op if p.alignment == 'g'])
             if not target:
                 return
-            slot = self.randchoice('evilness_slot', Item.SLOTS)
+            slot = rand.choice('evilness_slot', Item.SLOTS)
             if player.item_level(slot) < target.item_level(slot):
                 player.swap_items(target, slot)
                 self.logchanmsg([player, target],
@@ -2073,7 +2033,7 @@ class DawdleBot(object):
                             f"but realized it was lower level than your own.  You creep "
                             f"back into the shadows.")
         else:
-            amount = int(player.nextlvl * self.randint('evilness_penalty_pct', 1,6) / 100)
+            amount = int(player.nextlvl * rand.randint('evilness_penalty_pct', 1,6) / 100)
             player.nextlvl += amount
             self.logchanmsg([player], f"{C('name', player.name)} is forsaken by their evil god. {duration(amount)} is "
                               f"added to their clock.")
@@ -2085,8 +2045,8 @@ class DawdleBot(object):
         good_p = [p for p in op if p.alignment == 'g']
         if len(good_p) < 2:
             return
-        players = self.randsample('goodness_players', good_p, 2)
-        gain = self.randint('goodness_gain_pct', 5, 13)
+        players = rand.sample('goodness_players', good_p, 2)
+        gain = rand.randint('goodness_gain_pct', 5, 13)
         self.logchanmsg([players[0], players[1]],
                         f"{C('name', players[0].name)} and {C('name', players[1].name)} have not let the iniquities "
                         f"of evil people poison them. Together have they prayed to their god, "
@@ -2103,7 +2063,7 @@ class DawdleBot(object):
         op = self._db.online_players()
         if not op:
             return
-        self.randshuffle('move_players_order', op)
+        rand.shuffle('move_players_order', op)
         mapx = conf.get("mapx")
         mapy = conf.get("mapy")
         combatants = dict()
@@ -2111,7 +2071,7 @@ class DawdleBot(object):
             destx = self._quest.dests[self._quest.stage-1][0]
             desty = self._quest.dests[self._quest.stage-1][1]
             for p in self._quest.questors:
-                if not self.randomly("quest_movement", 10):
+                if not rand.randomly("quest_movement", 10):
                     # Move at 10% speed when questing.
                     op.remove(p)
                     continue
@@ -2137,14 +2097,14 @@ class DawdleBot(object):
 
         for p in op:
             # everyone else wanders aimlessly
-            p.posx = (p.posx + self.randint('move_player_x',-1,1)) % mapx
-            p.posy = (p.posy + self.randint('move_player_y',-1,1)) % mapy
+            p.posx = (p.posx + rand.randint('move_player_x',-1,1)) % mapx
+            p.posy = (p.posy + rand.randint('move_player_y',-1,1)) % mapy
 
             if (p.posx, p.posy) in combatants:
                 combatant = combatants[(p.posx, p.posy)]
-                if combatant.isadmin and self.randomly('move_player_bow', 100):
+                if combatant.isadmin and rand.randomly('move_player_bow', 100):
                     self.chanmsg(f"{C('name', p.name)} encounters {C('name', combatant.name)} and bows humbly.")
-                elif self.randomly('move_player_combat', len(op)):
+                elif rand.randomly('move_player_combat', len(op)):
                     self.pvp_battle(p, combatant,
                                     'come upon',
                                     'and taken them in combat',
@@ -2160,8 +2120,8 @@ class DawdleBot(object):
         qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin.timestamp() < latest_login_time]
         if len(qp) < 4:
             return
-        qp = self.randsample('quest_members', qp, 4)
-        questconf = self.randchoice('quest_selection', self._events["Q"])
+        qp = rand.sample('quest_members', qp, 4)
+        questconf = rand.choice('quest_selection', self._events["Q"])
         match = (re.match(r'(1) (.*)', questconf) or
                  re.match(r'(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
         if not match:
@@ -2169,7 +2129,7 @@ class DawdleBot(object):
         self._quest = Quest()
         self._quest.questors = qp
         if match[1] == '1':
-            quest_time = self.randint('quest_time', 6, 12)*3600
+            quest_time = rand.randint('quest_time', 6, 12)*3600
             self._quest.mode = 1
             self._quest.text = match[2]
             self._quest.qtime = time.time() + quest_time

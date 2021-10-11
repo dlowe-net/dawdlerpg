@@ -6,9 +6,10 @@ import tempfile
 import time
 import unittest
 
-from dawdle import irc
 from dawdle import bot
 from dawdle import conf
+from dawdle import irc
+from dawdle import rand
 
 class TestGameDBSqlite3(unittest.TestCase):
     def test_db(self):
@@ -160,7 +161,7 @@ class TestPvPBattle(unittest.TestCase):
         a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
         b.items['amulet'] = bot.Item(40, '')
-        self.bot._overrides = {
+        rand.overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
             'pvp_critical': False,
@@ -179,7 +180,7 @@ class TestPvPBattle(unittest.TestCase):
         conf._conf['botnick'] = 'dawdlerpg'
         a = self.bot._db.new_player('a', 'b', 'c')
         a.items['amulet'] = bot.Item(20, '')
-        self.bot._overrides = {
+        rand.overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
             'pvp_critical': False,
@@ -199,7 +200,7 @@ class TestPvPBattle(unittest.TestCase):
         a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
         b.items['amulet'] = bot.Item(40, '')
-        self.bot._overrides = {
+        rand.overrides = {
             'pvp_player_roll': 10,
             'pvp_opp_roll': 20,
             'pvp_critical': False,
@@ -219,7 +220,7 @@ class TestPvPBattle(unittest.TestCase):
         a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
         b.items['amulet'] = bot.Item(40, '')
-        self.bot._overrides = {
+        rand.overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
             'pvp_critical': True,
@@ -244,7 +245,7 @@ class TestPvPBattle(unittest.TestCase):
         a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
         b.items['amulet'] = bot.Item(40, '')
-        self.bot._overrides = {
+        rand.overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
             'pvp_critical': False,
@@ -269,7 +270,7 @@ class TestPvPBattle(unittest.TestCase):
         a.items['amulet'] = bot.Item(20, '')
         b = self.bot._db.new_player('b', 'c', 'd')
         b.items['amulet'] = bot.Item(40, '')
-        self.bot._overrides = {
+        rand.overrides = {
             'pvp_player_roll': 20,
             'pvp_opp_roll': 10,
             'pvp_critical': False,
@@ -324,7 +325,7 @@ class TestTeamBattle(unittest.TestCase):
         op[3].nextlvl = 3600
         op[4].nextlvl = 3600
         op[5].nextlvl = 3600
-        self.bot._overrides = {
+        rand.overrides = {
             'team_battle_members': op,
             'team_a_roll': 60,
             'team_b_roll': 30
@@ -346,7 +347,7 @@ class TestTeamBattle(unittest.TestCase):
         op[3].nextlvl = 3600
         op[4].nextlvl = 3600
         op[5].nextlvl = 3600
-        self.bot._overrides = {
+        rand.overrides = {
             'team_battle_members': op,
             'team_a_roll': 30,
             'team_b_roll': 60
@@ -372,7 +373,7 @@ class TestEvilness(unittest.TestCase):
         op[0].alignment = 'e'
         op[1].alignment = 'g'
         op[1].items['amulet'] = bot.Item(20, "")
-        self.bot._overrides = {
+        rand.overrides = {
             'evilness_theft': True,
             'evilness_slot': 'amulet'
         }
@@ -383,7 +384,7 @@ class TestEvilness(unittest.TestCase):
     def test_penalty(self):
         op = [self.bot._db.new_player('a', 'b', 'c')]
         op[0].alignment = 'e'
-        self.bot._overrides = {
+        rand.overrides = {
             'evilness_theft': False,
             'evilness_penalty_pct': 5
         }
@@ -407,7 +408,7 @@ class TestGoodness(unittest.TestCase):
         op = [self.bot._db.new_player('a', 'b', 'c'), self.bot._db.new_player('b', 'c', 'd')]
         op[0].alignment = 'g'
         op[1].alignment = 'g'
-        self.bot._overrides = {
+        rand.overrides = {
             'goodness_players': op,
             'goodness_gain_pct': 10,
         }
@@ -434,7 +435,7 @@ class TestHandOfGod(unittest.TestCase):
 
     def test_forward(self):
         op = [self.bot._db.new_player('a', 'b', 'c')]
-        self.bot._overrides = {
+        rand.overrides = {
             'hog_effect': False,
             'hog_amount': 10
         }
@@ -445,7 +446,7 @@ class TestHandOfGod(unittest.TestCase):
 
     def test_back(self):
         op = [self.bot._db.new_player('a', 'b', 'c')]
-        self.bot._overrides = {
+        rand.overrides = {
             'hog_effect': True,
             'hog_amount': 10
         }
@@ -485,7 +486,7 @@ class TestQuest(unittest.TestCase):
             p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
             p.nick = u.nick
             p.userhost = u.userhost
-        self.bot._overrides = {
+        rand.overrides = {
             "quest_members": op,
             "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
@@ -520,7 +521,7 @@ class TestQuest(unittest.TestCase):
             p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
             p.nick = u.nick
             p.userhost = u.userhost
-        self.bot._overrides = {
+        rand.overrides = {
             "quest_members": op,
             "quest_selection": "2 400 475 480 380 explore and chart the dark lands of T'rnalvph",
         }
@@ -557,7 +558,7 @@ class TestQuest(unittest.TestCase):
             p.nick = p.name
             p.level = 25
             p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
-        self.bot._overrides = {
+        rand.overrides = {
             "quest_members": op,
             "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
             "quest_time": 12
