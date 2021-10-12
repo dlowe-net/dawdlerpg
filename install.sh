@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [[ $UID != 0 ]]; then
+if [[ "$UID" != "0" ]]; then
     echo This script must be run as root.
     exit 1
 fi
@@ -10,10 +10,10 @@ if [[ "x$1" == "x" ]]; then
     exit 1
 fi
 
-HOST=$1
+HOST="$1"
 
-DIR=$(readlink -f $(dirname $0))
-echo Using $DIR as dawdlerpg directory.
+DIR="$(readlink -f $(dirname $0))"
+echo "Using $DIR as dawdlerpg directory."
 
 echo Installing services.
 apt install -y nginx python3-pip
@@ -32,20 +32,23 @@ systemctl enable dawdlerpg
 systemctl enable nginx
 
 echo Setting up dawdlerpg.
-pushd $DIR/site/
-SECRET_KEY=$(openssl rand -base64 45)
-sed -i -e "/^SECRET_KEY/ c \\SECRET_KEY = '${SECRET_KEY}'" \
+cp setup/dawdle.conf "$DIR/data"
+cp setup/events.txt "$DIR/data"
+pushd "$DIR/site/"
+SECRET_KEY="$(openssl rand -base64 45)"
+sed -e "/^SECRET_KEY/ c \\SECRET_KEY = '${SECRET_KEY}'" \
     -e "/^ALLOWED_HOSTS/ c \\ALLOWED_HOSTS = ['${HOST}']" \
     -e "/^DEBUG/ c \\DEBUG = False" \
-    project/settings.py
+    setup/project-settings.py \
+    >project/settings.py
 ./manage.py migrate --database=default
 ./manage.py migrate --database=game
 ./manage.py collectstatic --no-input
-cd $DIR
-$DIR/dawdle.py --setup $DIR/data/dawdle.conf
+cd "$DIR"
+"$DIR/dawdle.py" --setup "$DIR/data/dawdle.conf"
 popd
 
-chown -R www-data:www-data $DIR
+chown -R www-data:www-data "$DIR"
 
 echo Starting systems.
 systemctl start uwsgi
