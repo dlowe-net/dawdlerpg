@@ -45,6 +45,12 @@ sed -e "/^SECRET_KEY/ c \\SECRET_KEY = '${SECRET_KEY}'" \
 ./manage.py migrate --database=game
 ./manage.py collectstatic --no-input
 cd "$DIR"
+echo -n "You should now edit the dawdle.conf file for your particular game.  Press RETURN to begin editing."
+read
+"$EDITOR" "$DIR/data/dawdle.conf"
+if [[ $! != 0 ]]; then
+    exit $!
+fi
 "$DIR/dawdle.py" --setup "$DIR/data/dawdle.conf"
 popd
 

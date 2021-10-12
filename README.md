@@ -12,17 +12,18 @@ DawdleRPG is an IdleRPG clone written in Python.
 
 ## Setup with Website
 
-The website is written on top of the Django web framework, so it must
-first be installed.
+The included `install.sh` script will set up the dawdlerpg bot and
+website on a freshly installed Debian system.  It uses nginx, uwsgi,
+and django for the site.  At some point, you should be prompted to
+edit the dawdle.conf file, and you'll need to edit some configuration
+parameters explained by the comments in the file.
 
-- Run `pip install django`, making sure that `~/.local/bin` is part of
-  your `PATH` environment variable.
-- Run `site/manage.py migrate` to create the main database.
-- Run `site/manage.py migrate --database=game` to create the main database.
-- Set `store_format sqlite3` in your `dawdle.conf`
-- Set `dbfile <path to site/game.sqlite3>` in your `dawdle.conf`
-- Run `dawdle.py <path to your dawdle.conf>`
-- Point a webserver at your Django instance.
+```sh
+./install.sh <hostname>
+```
+
+If you don't have a clean install, you should instead look at the
+`install.sh` script and use the pieces that work for your setup.
 
 ## Migrating from IdleRPG
 
