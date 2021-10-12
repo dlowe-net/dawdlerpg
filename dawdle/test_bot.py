@@ -20,11 +20,14 @@ class TestGameDBSqlite3(unittest.TestCase):
             db.create()
             p = db.new_player('foo', 'bar', 'baz')
             p.online = True
+            p.lastlogin = datetime.datetime.now() + datetime.timedelta(days=5)
             db.write_players()
             self.assertTrue(db.exists())
             db.load_state()
             self.assertEqual(db['foo'].name, 'foo')
             self.assertEqual(db['foo'].online, True)
+            self.assertEqual(db['foo'].created, p.created)
+            self.assertEqual(db['foo'].lastlogin, p.lastlogin)
             db.close()
 
     def test_passwords(self):

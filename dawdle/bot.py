@@ -598,6 +598,8 @@ class Sqlite3GameStorage(GameStorage):
         with self._connect() as con:
             cur = con.execute("select * from dawdle_player")
             for d in cur.fetchall():
+                d["created"] = datetime.datetime.fromisoformat(d["created"])
+                d["lastlogin"] = datetime.datetime.fromisoformat(d["lastlogin"])
                 players[d["name"]] = Player.from_dict(d)
             cur = con.execute("select * from dawdle_item")
             for d in cur.fetchall():
