@@ -124,7 +124,7 @@ def start_bot():
     dawdlelog.init(conf.get("loglevel"))
 
     if conf.has("logfile"):
-        dawdlelog.log_to_file(conf.get("loglevel"), conf.get("logfile"))
+        dawdlelog.log_to_file(conf.get("loglevel"), bot.datapath(conf.get("logfile")))
 
     log.info("Bot %s starting.", bot.VERSION)
 
