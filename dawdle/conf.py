@@ -36,7 +36,10 @@ def read_config(path):
         "setup": False,
         "servers": [],
         "okurls": [],
+        "loggers": [],
         "localaddr": None,
+        # Legacy idlerpg option
+        "debug": False,
         # Non-idlerpg config needs defaults
         "confpath": os.path.realpath(path),
         "datadir": os.path.realpath(os.path.dirname(path)),
@@ -88,6 +91,8 @@ def read_config(path):
                     newconf["servers"].append(val)
                 elif key == "okurl":
                     newconf["okurls"].append(val)
+                elif key == "log":
+                    newconf["loggers"].append(val.split(" ", 2))
                 else:
                     newconf[key] = parse_val(val)
     except OSError as err:

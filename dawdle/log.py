@@ -5,20 +5,11 @@ logging.addLevelName("SPAMMY", 5)
 
 
 log = logging.getLogger()
+log.setLevel(0)
 
 
-def init(loglevel):
-    log.setLevel(loglevel)
-
-
-def log_to_file(loglevel, logfile):
+def add_handler(loglevel, logfile, template):
     h = logging.FileHandler(logfile)
     h.setLevel(loglevel)
-    h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
-    log.addHandler(h)
-
-
-def log_to_stderr():
-    h = logging.StreamHandler()
-    h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    h.setFormatter(logging.Formatter(template))
     log.addHandler(h)

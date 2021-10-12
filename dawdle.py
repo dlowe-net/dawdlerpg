@@ -117,14 +117,21 @@ def start_bot():
     """Main entry point for bot."""
     conf.init()
 
-    # debug mode turns off daemonization, sets log level to debug, and logs to stderr
+    # Legacy IdleRPG logging config
     if conf.get("debug"):
-        dawdlelog.log_to_stderr()
-
-    dawdlelog.init(conf.get("loglevel"))
+        dawdlelog.add_handler("DEBUG", "/dev/stderr", "%(asctime)s %(message)s")
 
     if conf.has("logfile"):
-        dawdlelog.log_to_file(conf.get("loglevel"), bot.datapath(conf.get("logfile")))
+        dawdlelog.add_handler(conf.get("loglevel"),
+                              bot.datapath(conf.get("logfile")),
+                              "%(asctime)s %(message)s")
+
+    # DawdleRPG logging config
+    for logger in conf.get("loggers"):
+        if len(logger) != 3:
+            sys.stderr.write(f"Invalid log configuration {logger}.")
+            sys.exit(2)
+        dawdlelog.add_handler(logger[0], bot.datapath(logger[1]), logger[2])
 
     log.info("Bot %s starting.", bot.VERSION)
 
@@ -134,7 +141,7 @@ def start_bot():
         store = bot.Sqlite3GameStorage(bot.datapath(conf.get("dbfile")))
     else:
         sys.stderr.write(f"Invalid configuration store_format={conf.get('store_format')}.  Configuration must be idlerpg or sqlite3.")
-        sys.exit(255)
+        sys.exit(2)
 
     if conf.get("setup"):
         if store.exists():
@@ -145,7 +152,7 @@ def start_bot():
     db = bot.GameDB(store)
     if not db.exists():
         sys.stderr.write("Game db doesn't exist.  Run with --setup.")
-        sys.exit(22)
+        sys.exit(6)
 
     db.backup_store()
     db.load_state()
@@ -184,7 +191,7 @@ def start_bot():
 
     if db.count_players() == 0:
         sys.stderr.write(f"Zero players in {conf.get('dbfile')}.  Do you need to run with --setup?")
-        sys.exit(255)
+        sys.exit(6)
 
     if conf.has("pidfile"):
         check_pidfile(bot.datapath(conf.get("pidfile")))
