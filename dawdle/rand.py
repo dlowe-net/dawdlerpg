@@ -22,7 +22,7 @@ def gauss(key, mu, sigma):
     """Overrideable func which returns an random int with gaussian distribution."""
     if key in overrides:
         return overrides[key]
-    return random.gauss(mu, sigma)
+    return int(random.gauss(mu, sigma))
 
 
 def sample(key, seq, count):
