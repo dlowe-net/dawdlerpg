@@ -10,6 +10,8 @@ from dawdle import bot
 from dawdle import conf
 from dawdle import irc
 from dawdle import rand
+from dawdle import log
+
 
 class TestGameDBSqlite3(unittest.TestCase):
     def test_db(self):
@@ -71,15 +73,30 @@ class FakeIRCClient(object):
         self.chanmsgs = []
         self.notices = {}
 
+
+    def user_exists(self, nick):
+        return nick in self._users
+
+
+    def nick_userhost(self, nick):
+        return self._users[nick]
+
+
     def resetmsgs(self):
         self.chanmsgs = []
         self.notices = {}
 
+
     def chanmsg(self, text):
         self.chanmsgs.append(text)
 
+
     def notice(self, nick, text):
         self.notices.setdefault(nick, []).append(text)
+
+
+    def servername(self):
+        return "irc.example.com"
 
 
 class FakeGameStorage(bot.GameStorage):
@@ -87,13 +104,16 @@ class FakeGameStorage(bot.GameStorage):
     def __init__(self):
         self._mem = {}
 
+    def backup(self):
+        pass
+
     def create(self):
         pass
 
     def readall(self):
         pass
 
-    def writeall(self, p):
+    def write(self, p):
         pass
 
     def close(self):
@@ -106,8 +126,16 @@ class FakeGameStorage(bot.GameStorage):
         self._mem[new] = self._mem[old]
         self._mem.pop(old)
 
-    def delete(self, pname):
+    def delete_player(self, pname):
         self._mem.pop(pname)
+
+
+    def add_history(self, players, text):
+        pass
+
+
+    def update_quest(self, quest):
+        pass
 
 
 class TestBot(unittest.TestCase):
@@ -133,6 +161,28 @@ class TestBot(unittest.TestCase):
         testbot.nick_changed(testirc._users['foo'], 'bar')
         self.assertEqual('bar', a.nick)
         testbot.nick_quit(testirc._users['foo'])
+
+
+    def test_dropped_conn(self):
+        conf._conf['splitwait'] = 10
+        conf._conf['pendropped'] = 20
+        conf._conf['rppenstep'] = 1.14
+        testbot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
+        testirc = FakeIRCClient()
+        testbot.connected(testirc)
+        testirc._users['foo'] = irc.IRCClient.User("foo", "foo!foo@example.com", [], 1)
+        a = testbot._db.new_player('a', 'b', 'c')
+        a.online = True
+        a.nick = 'foo'
+        a.userhost = 'foo!foo@example.com'
+        self.assertTrue(testbot._db._players['a'].nick, 'foo')
+        testbot.nick_dropped(testirc._users['foo'])
+        del testirc._users['foo']
+        testbot.expire_splits()
+        self.assertTrue(a.online)
+        a.lastlogin -= datetime.timedelta(seconds=11)
+        testbot.expire_splits()
+        self.assertFalse(a.online)
 
 class TestGameDB(unittest.TestCase):
 
@@ -463,7 +513,7 @@ class TestQuest(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
-        conf._conf['datadir'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+        conf._conf['datadir'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "setup")
         conf._conf['eventsfile'] = "events.txt"
         conf._conf['writequestfile'] = True
         conf._conf['questfilename'] = "/tmp/testquestfile.txt"
@@ -653,7 +703,7 @@ class TestGameTick(unittest.TestCase):
         conf._conf['rpstep'] = 1.14
         conf._conf['detectsplits'] = True
         conf._conf['splitwait'] = 300
-        conf._conf['datadir'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+        conf._conf['datadir'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "setup")
         conf._conf['eventsfile'] = "events.txt"
         conf._conf['writequestfile'] = True
         conf._conf['questfilename'] = "/tmp/testquestfile.txt"

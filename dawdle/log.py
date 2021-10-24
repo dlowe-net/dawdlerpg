@@ -1,15 +1,16 @@
 import logging
 import sys
 
-logging.SPAMMY = 5
-logging.addLevelName("SPAMMY", 5)
+from typing import Union
+
+logging.addLevelName(5, "SPAMMY")
 
 
 log = logging.getLogger()
 log.setLevel(0)
 
 
-def add_handler(loglevel, logfile, template):
+def add_handler(loglevel:Union[str, int] , logfile: str, template: str) -> None:
     if logfile == "/dev/stdout":
         h = logging.StreamHandler(sys.stdout)
     elif logfile == "/dev/stderr":

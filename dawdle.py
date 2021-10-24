@@ -33,7 +33,7 @@ from dawdle.log import log
 import dawdle.log as dawdlelog
 
 
-def first_setup(db):
+def first_setup(db: bot.GameDB) -> None:
     """Perform initialization of game."""
     pname = input(f"Initializing dbfile {bot.datapath(conf.get('dbfile'))}.  Give an account name that you would like to have admin access [{conf.get('owner')}]: ")
     if pname == "":
@@ -60,7 +60,7 @@ def first_setup(db):
     print(f"\n\nOK, wrote you into {bot.datapath(conf.get('dbfile'))}\n")
 
 
-def check_pidfile(pidfile):
+def check_pidfile(pidfile: str) -> None:
     """Exit if pid in pidfile is still active."""
     try:
         with open(pidfile) as inf:
@@ -76,7 +76,7 @@ def check_pidfile(pidfile):
         pass
 
 
-def daemonize():
+def daemonize() -> None:
     """Daemonize the process."""
     # python-daemon on pip would do this better.
 
@@ -103,7 +103,7 @@ def daemonize():
     os.dup2(os.open(os.devnull, os.O_RDWR), sys.stderr.fileno())
 
 
-async def mainloop(client):
+async def mainloop(client: irc.IRCClient) -> None:
     """Connect to servers repeatedly."""
     while not client.quitting:
         addr, port = conf.get("servers")[0].split(':')
@@ -113,7 +113,7 @@ async def mainloop(client):
         await asyncio.sleep(conf.get("reconnect_wait"))
 
 
-def start_bot():
+def start_bot() -> None:
     """Main entry point for bot."""
     conf.init()
 
@@ -135,6 +135,7 @@ def start_bot():
 
     log.info("Bot %s starting.", bot.VERSION)
 
+    store: bot.GameStorage
     if conf.get("store_format") == "idlerpg":
         store = bot.IdleRPGGameStorage(bot.datapath(conf.get("dbfile")))
     elif conf.get("store_format") == "sqlite3":
@@ -172,13 +173,17 @@ def start_bot():
         names = set(db._players.keys())
         history = []
         with open(bot.datapath(conf.get("modsfile")), "rb") as inf:
-            for line in inf.readlines():
+            for linebytes in inf.readlines():
                 try:
-                    line = str(line, encoding='utf8')
+                    line = str(linebytes, encoding='utf8')
                 except UnicodeDecodeError:
-                    line = str(line, encoding='latin-1')
+                    line = str(linebytes, encoding='latin-1')
 
-                mon, day, year, timeofday, text = re.match(r'\[(\d\d)/(\d\d)/(\d\d) (.*?)\] (.*)', line).groups()
+                match = re.match(r'\[(\d\d)/(\d\d)/(\d\d) (.*?)\] (.*)', line)
+                if not match:
+                    print(f"Line didn't parse: {line}")
+                    continue
+                mon, day, year, timeofday, text = match.groups()
                 for word in re.findall(r"\w+", text):
                     if word in names:
                         history.append((word, f"20{year}-{mon}-{day} {timeofday}", text))

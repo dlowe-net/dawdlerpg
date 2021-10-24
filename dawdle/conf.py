@@ -5,6 +5,7 @@ import re
 import sys
 
 from dawdle.log import log
+from typing import cast, Any, Dict, List, Union, Tuple
 
 DURATION_RE = re.compile(r"(\d+)([dhms])")
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
@@ -12,7 +13,7 @@ NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
 _conf = dict()
 
 
-def parse_val(s):
+def parse_val(s: str) -> Union[bool, float, str]:
     """Parse values used in the configuration file."""
     if s in ["on", "yes", "true"]:
         return True
@@ -30,7 +31,7 @@ def parse_val(s):
     return s
 
 
-def read_config(path):
+def read_config(path: str) -> Dict[str, Any]:
     """Return dict with contents of configuration file."""
     newconf = {
         "setup": False,
@@ -88,11 +89,11 @@ def read_config(path):
                     log.critical(f"Please edit {path} to setup your bot's options.")
                     sys.exit(1)
                 elif key == "server":
-                    newconf["servers"].append(val)
+                    cast(List[str], newconf["servers"]).append(val)
                 elif key == "okurl":
-                    newconf["okurls"].append(val)
+                    cast(List[str], newconf["okurls"]).append(val)
                 elif key == "log":
-                    newconf["loggers"].append(val.split(" ", 2))
+                    cast(List[List[str]], newconf["loggers"]).append(val.split(" ", 2))
                 else:
                     newconf[key] = parse_val(val)
     except OSError as err:
@@ -101,7 +102,7 @@ def read_config(path):
     return newconf
 
 
-def init():
+def init() -> None:
     global _conf
     parser = argparse.ArgumentParser(description="IdleRPG clone")
     parser.add_argument("-o", "--override", action='append', default=[], help="Override config option in k=v format.")
@@ -140,8 +141,8 @@ def init():
         _conf["loglevel"] = logging.DEBUG
 
 
-def get(key):
+def get(key: str) -> Any:
     return _conf[key]
 
-def has(key):
+def has(key: str) -> Any:
     return key in _conf

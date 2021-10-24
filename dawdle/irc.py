@@ -6,18 +6,16 @@ import re
 import textwrap
 import time
 
+from dawdle import abstract
+from dawdle import chunk
 from dawdle import conf
 from dawdle.log import log
-
-def grouper(iterable, n):
-    """Collect data into fixed-length chunks or blocks
-
-    grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
-    """
-    return [iterable[i:i+n] for i in range(0, len(iterable), n)]
+from typing import Awaitable, Dict, Iterable, List, Optional, Set, Sequence, TypeVar
 
 
-class IRCClient:
+T = TypeVar("T")
+
+class IRCClient(abstract.AbstractClient):
     """IRCClient acts as a layer between the IRC protocol and the bot protocol.
 
     This class has the following responsibilities:
@@ -34,17 +32,33 @@ class IRCClient:
     Message = collections.namedtuple('Message', ['tags', 'src', 'user', 'host', 'cmd', 'args', 'trailing', 'line', 'time'])
 
 
-    class User:
+    class User(abstract.AbstractClient.User):
         """An IRC user in the channel."""
 
-        def __init__(self, nick, userhost, modes, joined):
+        def __init__(self, nick: str, userhost: str, modes: List[str], joined: float):
             self.nick = nick
             self.userhost = userhost
             self.modes = set(modes)
             self.joined = joined
 
 
-    def __init__(self, bot):
+    _bot: abstract.AbstractBot
+    _writer: Optional[asyncio.StreamWriter]
+    _nick: str
+    _bytes_sent: int
+    _bytes_received: int
+    _caps: Set[str]
+    _server: Optional[str]
+    _messages_sent: int
+    _writeq: List[bytes]
+    _flushq_task: Optional[asyncio.Task] # type: ignore
+    _prefixmodes: Dict[str, str]
+    _maxmodes: int
+    _modetypes: Dict[str, int]
+    _users: Dict[str, abstract.AbstractClient.User]
+    quitting: bool
+
+    def __init__(self, bot: abstract.AbstractBot):
         self._bot = bot
         self._writer = None
         self._nick = conf.get("botnick")
@@ -59,11 +73,10 @@ class IRCClient:
         self._maxmodes = 3
         self._modetypes = {}
         self._users = {}
-        self._caps = set()             # all enabled capabilities
         self.quitting = False
 
 
-    async def connect(self, addr, port):
+    async def connect(self, addr: str, port: str) -> None:
         """Connect to IRC network and handle messages."""
         reader, self._writer = await asyncio.open_connection(addr, port, ssl=True, local_addr=conf.get("localaddr"))
         self._server = addr
@@ -84,28 +97,32 @@ class IRCClient:
         self.sendnow(f"USER {conf.get('botuser')} 0 * :{conf.get('botrlnm')}")
         self._bot.connected(self)
         while True:
-            line = await reader.readline()
-            if not line:
+            linebytes = await reader.readline()
+            if not linebytes:
                 if self._flushq_task:
                     self._flushq_task.cancel()
                 self._bot.disconnected()
-                await reader.close()
+                self._writer.close()
+                await self._writer.wait_closed()
+                self._writer = None
                 break
-            self._bytes_received += len(line)
+            self._bytes_received += len(linebytes)
             # Assume utf-8 encoding, fall back to latin-1, which has no invalid encodings from bytes.
             try:
-                line = str(line, encoding='utf8')
+                line = str(linebytes, encoding='utf8')
             except UnicodeDecodeError:
-                line = str(line, encoding='latin-1')
+                line = str(linebytes, encoding='latin-1')
             line = line.rstrip('\r\n')
-            loglevel = logging.SPAMMY if re.match(r"^PING ", line) else logging.DEBUG
+            loglevel = 5 if re.match(r"^PING ", line) else logging.DEBUG
             log.log(loglevel, "<- %s", line)
             msg = self.parse_message(line)
-            self.dispatch(msg)
+            if msg:
+                self.dispatch(msg)
 
 
-    def send(self, s, loglevel=logging.DEBUG):
+    def send(self, s: str, loglevel: int=logging.DEBUG) -> None:
         """Send throttled messages."""
+        assert self._writer is not None
         b = bytes(s+"\r\n", encoding='utf8')
 
         if not conf.get("throttle"):
@@ -127,8 +144,9 @@ class IRCClient:
             self._flushq_task = asyncio.create_task(self.flushq_task())
 
 
-    def sendnow(self, s, loglevel=logging.DEBUG):
+    def sendnow(self, s: str, loglevel:int=logging.DEBUG) -> None:
         """Send messages ignoring throttle."""
+        assert self._writer is not None
         log.log(loglevel, "=> %s", s)
         b = bytes(s+"\r\n", encoding='utf8')
         self._writer.write(b)
@@ -138,8 +156,9 @@ class IRCClient:
             self._flushq_task = asyncio.create_task(self.flushq_task())
 
 
-    async def flushq_task(self):
+    async def flushq_task(self) -> None:
         """Flush send queue and release throttle."""
+        assert self._writer is not None
         await asyncio.sleep(conf.get("throttle_period"))
         self._messages_sent = max(0, self._messages_sent - conf.get("throttle_rate"))
         while self._writeq:
@@ -156,15 +175,43 @@ class IRCClient:
         self._flushq_task = None
 
 
-    def parse_message(self, line):
+    def servername(self) -> str:
+        if self._server:
+            return self._server
+        return "<disconnected>"
+
+
+    def bytes_sent(self) -> int:
+        return self._bytes_sent
+
+
+    def bytes_received(self) -> int:
+        return self._bytes_received
+
+
+    def writeq_len(self) -> int:
+        """Returns number of messages in the write queue."""
+        return sum([len(b) for b in self._writeq])
+
+
+    def writeq_bytes(self) -> int:
+        """Returns number of bytes in the write queue."""
+        return sum([len(b) for b in self._writeq])
+
+
+    def clear_writeq(self) -> None:
+        self._writeq.clear()
+
+
+    def parse_message(self, line: str) -> Optional[Message]:
         """Parse IRC line into a Message."""
         # Parse IRC message with a regular expression
         match = IRCClient.MESSAGE_RE.match(line)
         if not match:
             return None
-        rawtags, src, user, host, cmd, args, trailing = match.groups()
+        rawtags, src, user, host, cmd, argstr, trailing = match.groups()
         # IRCv3 supports tags
-        tags = dict()
+        tags: Dict[str, Optional[str]] = dict()
         if rawtags is not None and rawtags != "":
             for pairstr in rawtags.split(';'):
                 pair = pairstr.split('=')
@@ -175,10 +222,10 @@ class IRCClient:
                 else:
                     tags[pair[0]] = None
         # Arguments before the trailing argument (after the colon) are space-delimited
-        if args == "":
+        if argstr == "":
             args = []
         else:
-            args = args.rstrip().split(' ')
+            args = argstr.rstrip().split(' ')
         # There's nothing special about the trailing argument except it can have spaces.
         if trailing is not None:
             args.append(trailing)
@@ -186,25 +233,25 @@ class IRCClient:
         if re.match(r'\d+', cmd):
             args = args[1:]
         # Support time tag, which allows servers and bouncers to send history
-        if 'time' in tags:
+        if 'time' in tags and tags["time"] is not None:
             msgtime = time.mktime(time.strptime(tags['time'], "%Y-%m-%dT%H:%M:%S"))
         else:
             msgtime = time.time()
         return IRCClient.Message(tags, src, user, host, cmd, args, trailing, line, msgtime)
 
 
-    def dispatch(self, msg):
+    def dispatch(self, msg: Message) -> None:
         """Dispatch the IRC command to a handler method."""
         if hasattr(self, "handle_"+msg.cmd.lower()):
             getattr(self, "handle_"+msg.cmd.lower())(msg)
 
 
-    def handle_ping(self, msg):
+    def handle_ping(self, msg: Message) -> None:
         """PING - sends PONG back to server for keepalive."""
-        self.sendnow(f"PONG :{msg.trailing}", loglevel=logging.SPAMMY)
+        self.sendnow(f"PONG :{msg.trailing}", loglevel=5)
 
 
-    def handle_005(self, msg):
+    def handle_005(self, msg: Message) -> None:
         """RPL_ISUPPORT - server features and information"""
         self._server = msg.src
         params = dict([arg.split('=') if '=' in arg else (arg, arg) for arg in msg.args])
@@ -229,19 +276,19 @@ class IRCClient:
                     self._modetypes[mode] = 4 # never has a parameter
 
 
-    def handle_376(self, msg):
+    def handle_376(self, msg: Message) -> None:
         """RPL_ENDOFMOTD - server is ready"""
         self.mode(conf.get("botnick"), conf.get("botmodes"))
         self.join(conf.get("botchan"))
 
 
-    def handle_422(self, msg):
+    def handle_422(self, msg: Message) -> None:
         """ERR_NOTMOTD - server is ready, but without a MOTD"""
         self.mode(conf.get("botnick"), conf.get("botmodes"))
         self.join(conf.get("botchan"))
 
 
-    def handle_352(self, msg):
+    def handle_352(self, msg: Message) -> None:
         """RPL_WHOREPLY - Response to WHO command"""
         self.add_user(msg.args[4],
                       f"{msg.src}!{msg.args[1]}@{msg.args[2]}",
@@ -249,12 +296,12 @@ class IRCClient:
                       msg.time)
 
 
-    def handle_315(self, msg):
+    def handle_315(self, msg: Message) -> None:
         """RPL_ENDOFWHO - End of WHO command response"""
         self._bot.ready()
 
 
-    def handle_353(self, msg):
+    def handle_353(self, msg: Message) -> None:
         """RPL_NAMREPLY - names in the channel"""
         if 'userhost-in-names' not in self._caps:
             return
@@ -266,7 +313,7 @@ class IRCClient:
                 self.add_user(m[3], m[2], [self._prefixmodes[p] for p in m[1]], msg.time)
 
 
-    def handle_366(self, msg):
+    def handle_366(self, msg: Message) -> None:
         """RPL_ENDOFNAMES - the actual end of channel joining"""
         # We know who is in the channel now
         if conf.has("botopcmd"):
@@ -277,7 +324,7 @@ class IRCClient:
             self.send(f"WHO {conf.get('botchan')}")
 
 
-    def handle_433(self, msg):
+    def handle_433(self, msg: Message) -> None:
         """ERR_NICKNAME_IN_USE - try another nick"""
         self._nick = self._nick + "0"
         self.nick(self._nick)
@@ -285,31 +332,31 @@ class IRCClient:
             self.send(conf.get("botghostcmd"))
 
 
-    def handle_cap(self, msg):
+    def handle_cap(self, msg: Message) -> None:
         """CAP - notification of capability"""
         # We only care about enabled capabilities.
         if msg.args[1] == "ACK":
             self._caps.update(msg.args[2].split(' '))
 
 
-    def handle_join(self, msg):
+    def handle_join(self, msg: Message) -> None:
         """JOIN - bot or user joined the channel."""
         self.add_user(msg.src, f"{msg.src}!{msg.user}@{msg.host}", [], msg.time)
 
 
-    def handle_part(self, msg):
+    def handle_part(self, msg: Message) -> None:
         """PART - bot or user left the channel."""
         user = self.remove_user(msg.src)
         self._bot.nick_parted(user)
 
 
-    def handle_kick(self, msg):
+    def handle_kick(self, msg: Message) -> None:
         """KICK - user was kicked from the channel."""
         user = self.remove_user(msg.args[1])
         self._bot.nick_kicked(user)
 
 
-    def handle_mode(self, msg):
+    def handle_mode(self, msg: Message) -> None:
         """MODE - bot or channel changed its mode."""
         # ignore mode changes to everything except the bot channel
         if msg.args[0] != conf.get("botchan"):
@@ -338,7 +385,7 @@ class IRCClient:
                     self._users[param].modes.discard(change[1])
 
 
-    def handle_nick(self, msg):
+    def handle_nick(self, msg: Message) -> None:
         """NICK - bot or user had its nick changed."""
 
         # Do this first so that the user still matches the player.
@@ -358,7 +405,7 @@ class IRCClient:
             self.nick(conf.get("botnick"))
 
 
-    def handle_quit(self, msg):
+    def handle_quit(self, msg: Message) -> None:
         """QUIT - bot or user was disconnected."""
         if msg.src == conf.get("botnick"):
             # Grab my nick that someone left
@@ -373,14 +420,14 @@ class IRCClient:
             self._bot.nick_quit(user)
 
 
-    def handle_notice(self, msg):
+    def handle_notice(self, msg: Message) -> None:
         """NOTICE - Message sent, used to prevent loops in bots."""
         if msg.args[0] != self._nick and msg.src in self._users and self.user_is_ok(msg):
             # we ignore private notices
             self._bot.channel_notice(self._users[msg.src], msg.trailing)
 
 
-    def handle_privmsg(self, msg):
+    def handle_privmsg(self, msg: Message) -> None:
         """PRIVMSG - Message sent."""
         if msg.src not in self._users:
             # Server messages
@@ -391,12 +438,12 @@ class IRCClient:
             self._bot.channel_message(self._users[msg.src], msg.trailing)
 
 
-    def add_user(self, nick, userhost, modes, joined):
+    def add_user(self, nick: str, userhost: str, modes: List[str], joined: float) -> None:
         """Adds channel user with the given properties."""
         self._users[nick] = IRCClient.User(nick, userhost, modes, joined)
 
 
-    def remove_user(self, nick):
+    def remove_user(self, nick: str) -> "abstract.AbstractClient.User":
         """Remove user with the given nick.  Returns that user."""
         user = self._users[nick]
         del self._users[nick]
@@ -407,7 +454,11 @@ class IRCClient:
         return user
 
 
-    def user_is_ok(self, msg):
+    def user_exists(self, nick: str) -> bool:
+        return nick in self._users
+
+
+    def user_is_ok(self, msg: Message) -> bool:
         """Check to see if msg should cause user to be kickbanned."""
         if not conf.get("doban"):
             # Bot doesn't do bans
@@ -433,61 +484,88 @@ class IRCClient:
         return True
 
 
-    def match_user(self, nick, userhost):
+    def match_user(self, nick: str, userhost: str) -> bool:
         """Return True if the nick and userhost match an existing user."""
         return (nick in self._users and userhost == self._users[nick].userhost)
 
 
-    def bot_has_ops(self):
+    def is_bot_nick(self, nick: str) -> bool:
+         return nick == self._nick or nick == conf.get("botnick")
+
+
+    def bot_has_ops(self) -> bool:
         """Return True if the bot has ops in the channel."""
         return (self._nick in self._users and 'o' in self._users[self._nick].modes)
 
 
-    def kickban(self, nick):
+    def nick_userhost(self, nick: str) -> Optional[str]:
+        if nick not in self._users:
+            return None
+        return self._users[nick].userhost
+
+
+    def kickban(self, nick: str) -> None:
         """Kick a nick from the channel and ban them."""
         self.sendnow(f"MODE {conf.get('botchan')} +b {nick}")
         self.sendnow(f"KICK {conf.get('botchan')} {nick} :No advertising")
 
 
-    def nick(self, nick):
+    def nick(self, nick: str) -> None:
         """Send nick change request."""
         self.sendnow(f"NICK {nick}")
 
 
-    def join(self, channel):
+    def join(self, channel: str) -> None:
         """Send channel join request."""
         self.sendnow(f"JOIN {channel}")
 
 
-    def notice(self, target, text):
+    def grant_voice(self, *targets: str) -> None:
+        for subset in chunk.chunk(targets, self._maxmodes):
+            self.send(f"MODE {conf.get('botchan')} +{'v' * len(subset)} {' '.join(subset)}")
+
+
+    def revoke_voice(self, *targets: str) -> None:
+        for subset in chunk.chunk(targets, self._maxmodes):
+            self.send(f"MODE {conf.get('botchan')} -{'v' * len(subset)} {' '.join(subset)}")
+
+
+    def set_channel_voices(self, voiced_nicks: Iterable[str]) -> None:
+        add_voice = []
+        remove_voice = []
+        for u in self._users.keys():
+            if 'v' in self._users[u].modes:
+                if u not in voiced_nicks:
+                    remove_voice.append(u)
+            else:
+                if u in voiced_nicks:
+                    add_voice.append(u)
+        if add_voice:
+            self.grant_voice(*add_voice)
+        if remove_voice:
+            self.revoke_voice(*remove_voice)
+
+
+
+    def mode(self, target: str, *modeinfo: str) -> None:
+        """Send mode change request."""
+        for modes in chunk.chunk(modeinfo, self._maxmodes):
+            self.send(f"MODE {target} {' '.join(modes)}")
+
+
+    def notice(self, target: str, text: str) -> None:
         """Send notice text to target."""
         for line in textwrap.wrap(text, width=conf.get("message_wrap_len")):
             self.send(f"NOTICE {target} :{line}")
 
 
-    def grant_voice(self, *targets):
-        for subset in grouper(targets, self._maxmodes):
-            self.send(f"MODE {conf.get('botchan')} +{'v' * len(subset)} {' '.join(subset)}")
-
-
-    def revoke_voice(self, *targets):
-        for subset in grouper(targets, self._maxmodes):
-            self.send(f"MODE {conf.get('botchan')} -{'v' * len(subset)} {' '.join(subset)}")
-
-
-    def mode(self, target, *modeinfo):
-        """Send mode change request."""
-        for modes in grouper(modeinfo, self._maxmodes):
-            self.send(f"MODE {target} {' '.join(modes)}")
-
-
-    def chanmsg(self, text):
+    def chanmsg(self, text: str) -> None:
         """Send message text to bot channel."""
         for line in textwrap.wrap(text, width=conf.get("message_wrap_len")):
             self.send(f"PRIVMSG {conf.get('botchan')} :{line}")
 
 
-    def quit(self, *text):
+    def quit(self, text: str) -> None:
         """Send quit request to server."""
         self.quitting = True
         if text:

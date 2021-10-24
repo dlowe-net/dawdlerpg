@@ -5,12 +5,12 @@ from dawdle import irc
 
 class FakeBot():
 
-    def nick_changed(self, old, new):
+    def nick_changed(self, old: str, new: str) -> None:
         pass
 
 
 class TestIRCMessage(unittest.TestCase):
-    def test_basic(self):
+    def test_basic(self) -> None:
         line = "@time=2021-07-31T13:55:00;bar=baz :nick!example@example.com PART #example :later!"
         msg = irc.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {"time": "2021-07-31T13:55:00", "bar": "baz"})
@@ -23,7 +23,7 @@ class TestIRCMessage(unittest.TestCase):
         self.assertEqual(msg.line, line)
         self.assertEqual(msg.time, 1627754100)
 
-    def test_one_trailing_arg(self):
+    def test_one_trailing_arg(self) -> None:
         line = ":foo!bar@example.com NICK :baz"
         msg = irc.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {})
@@ -35,7 +35,7 @@ class TestIRCMessage(unittest.TestCase):
         self.assertEqual(msg.trailing, "baz")
         self.assertEqual(msg.line, line)
 
-    def test_complextags(self):
+    def test_complextags(self) -> None:
         line = "@keyone=one\\sbig\\:value;keytwo=t\\wo\\rbig\\n\\\\values :nick!example@example.com PART #example :later!"
         msg = irc.IRCClient.parse_message(None, line)
         self.assertEqual(msg.tags, {
@@ -44,13 +44,13 @@ class TestIRCMessage(unittest.TestCase):
             })
 
 
-    def test_notags(self):
+    def test_notags(self) -> None:
         line = ":nick!example@example.com PART #example :later!"
         msg = irc.IRCClient.parse_message(None,line)
         self.assertEqual(msg.tags, {})
         self.assertEqual(msg.src, "nick")
 
-    def test_badtags(self):
+    def test_badtags(self) -> None:
         line = "@asdf :nick!example@example.com PART #example :later!"
         msg = irc.IRCClient.parse_message(None,line)
         self.assertEqual(msg.tags, {'asdf': None})
@@ -61,21 +61,21 @@ class TestIRCMessage(unittest.TestCase):
         self.assertEqual(msg.tags, {})
         self.assertEqual(msg.src, "nick")
 
-    def test_bad_encoding(self):
+    def test_bad_encoding(self) -> None:
         line = "\255\035"
         msg = irc.IRCClient.parse_message(None, line)
 
 
 class TestIRCClient(unittest.TestCase):
 
-    def test_handle_cap(self):
+    def test_handle_cap(self) -> None:
         conf._conf['botnick'] = 'foo'
         client = irc.IRCClient(None)
         client.handle_cap(irc.IRCClient.Message(tags={}, src='tungsten.libera.chat', user=None, host=None, cmd='CAP', args=['*', 'ACK', 'multi-prefix'], trailing='multi-prefix', line=':tungsten.libera.chat CAP * ACK :multi-prefix', time=1629501206))
         self.assertIn("multi-prefix", client._caps)
 
 
-    def test_nick_change(self):
+    def test_nick_change(self) -> None:
         conf._conf['botnick'] = 'dawdlerpg'
         testbot = FakeBot()
         client = irc.IRCClient(testbot)

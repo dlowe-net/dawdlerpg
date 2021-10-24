@@ -28,23 +28,26 @@ import time
 
 from hmac import compare_digest as compare_hash
 
+from dawdle import abstract
+from dawdle import chunk
 from dawdle import conf
 from dawdle import rand
 from dawdle.log import log
+from typing import cast, Any, Dict, List, Literal, Iterable, Optional, Sized, Set, Sequence, Tuple
+
 
 VERSION = "1.0.0"
 
 start_time = int(time.time())
 
-
-def plural(num, singlestr='', pluralstr='s'):
+def plural(num: int, singlestr: str='', pluralstr: str='s') -> str:
     """Return singlestr when num is 1, otherwise pluralstr."""
     if num == 1:
         return singlestr
     return pluralstr
 
 
-def duration(secs):
+def duration(secs: int) -> str:
     """Return description of duration marked in seconds."""
     d, secs = int(secs / 86400), secs % 86400
     h, secs = int(secs / 3600), secs % 3600
@@ -52,22 +55,14 @@ def duration(secs):
     return C("duration", f"{d} day{plural(d)}, {h:02d}:{m:02d}:{int(secs):02d}")
 
 
-def datapath(path):
+def datapath(path: str) -> str:
     """Return path relative to datadir unless path is absolute."""
     if os.path.isabs(path):
         return path
     return os.path.join(conf.get("datadir"), path)
 
 
-def grouper(iterable, n):
-    """Collect data into fixed-length chunks or blocks
-
-    grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
-    """
-    return [iterable[i:i+n] for i in range(0, len(iterable), n)]
-
-
-def CC(color):
+def CC(color: str) -> str:
     """Return color code if colors are enabled."""
     if not conf.get("color"):
         return ""
@@ -77,7 +72,7 @@ def CC(color):
     return f"\x03{colors[color]:02d},99"
 
 
-def C(field='', text=''):
+def C(field: str='', text: str='') -> str:
     """Return colorized version of text according to config field.
 
     If text is specified, returns the colorized version with a formatting reset.
@@ -114,29 +109,55 @@ class Item(object):
     }
 
 
-    def __init__(self, level, name):
+    def __init__(self, level: int, name: str):
         self.level = level
         self.name = name
 
-    def __eq__(self, o):
+    def __eq__(self, o: object) -> bool:
+        if not isinstance(o, Item):
+            return NotImplemented
         return self.level == o.level and self.name == o.name
 
 
 class Player(object):
     """Represents a player of the dawdlerpg game."""
 
+    name: str
+    cclass: str
+    pw: str
+    isadmin: bool
+    level: int
+    nextlvl: int
+    online: bool
+    nick: str
+    userhost: str
+    idled: int
+    posx: int
+    posy: int
+    penmessage: int
+    pennick: int
+    penpart: int
+    penkick: int
+    penquit: int
+    pendropped: int
+    penquest: int
+    penlogout: int
+    created: datetime.datetime
+    lastlogin: datetime.datetime
+    alignment: str
+    items: Dict[str, Item]
 
     @classmethod
-    def from_dict(cls, d):
+    def from_dict(cls: object, d: Dict[str, Any]) -> "Player":
         """Returns a player with its values set to the dict's."""
-        p = cls()
+        p = Player()
         for k,v in d.items():
             setattr(p, k, v)
         p.items = dict()
         return p
 
     @staticmethod
-    def new_player(pname, pclass, ppass, nextlvl):
+    def new_player(pname: str, pclass: str, ppass: str, nextlvl: int) -> "Player":
         """Initialize a new player."""
         now = datetime.datetime.now().replace(microsecond=0)
         p = Player()
@@ -192,43 +213,47 @@ class Player(object):
         return p
 
 
-    def set_password(self, ppass):
+    def set_password(self, ppass: str) -> None:
         """Sets the password field with a hashed value."""
         self.pw = crypt.crypt(ppass, crypt.mksalt())
 
 
-    def item_level(self, slot):
+    def item_level(self, slot: str) -> int:
         if slot not in self.items:
             return 0
         return self.items[slot].level
 
 
-    def item_name(self, slot):
+    def item_name(self, slot: str) -> str:
         if slot not in self.items:
             return ""
         return self.items[slot].name
 
 
-    def acquire_item(self, slot, level, name=''):
+    def acquire_item(self, slot: str, level: int, name: str='') -> None:
         """Acquire an item."""
         self.items[slot] = Item(level, name)
 
 
-    def swap_items(self, o, slot):
+    def swap_items(self, o: "Player", slot: str) -> None:
         """Swap items of SLOT with the other player O."""
-        self.items[slot], o.items[slot] = o.items.get(slot), self.items.get(slot)
-        if self.items[slot] is None:
-            del self.items[slot]
-        if o.items[slot] is None:
+        myitem, otheritem = self.items.get(slot), o.items.get(slot)
+        if myitem is None and otheritem is not None:
             del o.items[slot]
+        elif myitem is not None:
+            o.items[slot] = myitem
+        if otheritem is None and myitem is not None:
+            del self.items[slot]
+        elif otheritem is not None:
+            self.items[slot] = otheritem
 
 
-    def itemsum(self):
+    def itemsum(self) -> int:
         """Add up the power of all the player's items"""
         return sum([item.level for item in self.items.values()])
 
 
-    def battleitemsum(self):
+    def battleitemsum(self) -> int:
         """
         Add up item power for battle.
 
@@ -242,56 +267,81 @@ class Player(object):
         return sum
 
 
+class Quest(object):
+    """Class for tracking quests."""
+    questor_names: List[str]
+    questors: List[Player]
+    mode: int
+    text: str
+    qtime: Optional[int]
+    stage: Optional[int]
+    dests: List[Tuple[int, int]]
+
+    def __init__(self) -> None:
+        # TODO: This is an ugly hack to support deserialization.
+        self.questor_names = []
+        self.questors = []
+        self.mode = 0
+        self.text = ""
+        self.qtime = None
+        self.stage = None
+        self.dests = []
+
+
 class GameStorage(object):
     """Interface for a GameDB backend."""
 
-    def create(self):
+    def create(self) -> None:
         """Create a new store."""
-        pass
+        raise NotImplementedError
 
-    def exists(self):
+    def exists(self) -> bool:
         """Return True if a store exists."""
-        pass
+        raise NotImplementedError
 
-    def backup(self):
+    def backup(self) -> None:
         """Backup the store to a backup directory."""
-        pass
+        raise NotImplementedError
 
-    def readall(self):
+    def clear(self) -> None:
+        """Reinitialize the store."""
+        raise NotImplementedError
+
+    def readall(self) -> Iterable[Player]:
         """Returns all players read from store."""
-        pass
+        raise NotImplementedError
 
-    def write(self, players):
+    def write(self, players: Iterable[Player]) -> None:
         """Write the given players to the store."""
-        pass
+        raise NotImplementedError
 
-    def close(self):
+    def close(self) -> None:
         """Close the store."""
-        pass
+        raise NotImplementedError
 
-    def new(self, player):
+    def new(self, player: Player) -> None:
         """Create a new player record."""
-        pass
+        raise NotImplementedError
 
-    def rename_player(self, old, new):
+    def rename_player(self, old: str, new: str) -> None:
         """Rename a player in the store."""
-        pass
+        raise NotImplementedError
 
-    def delete_player(self, pname):
+    def delete_player(self, pname: str) -> None:
         """Removes a player from the store."""
-        pass
+        raise NotImplementedError
 
-    def add_history(self, players, text):
+    def add_history(self, players: List[str], text: str) -> None:
         """Adds history text for the players."""
-        pass
+        raise NotImplementedError
 
-    def read_quest(self):
+    def read_quest(self) -> Optional[Quest]:
         """Returns stored quest object or None."""
-        pass
+        raise NotImplementedError
 
-    def update_quest(self, quest):
+    def update_quest(self, quest: Optional[Quest]) -> None:
         """Updates quest information in store."""
-        pass
+        raise NotImplementedError
 
 
 class IdleRPGGameStorage(GameStorage):
@@ -319,38 +369,47 @@ class IdleRPGGameStorage(GameStorage):
         "Jeff's Cluehammer of Doom":"g"
     }
 
-    def _code_to_item(self, s):
+    _dbpath: str
+    _cache: List[Player]
+
+    def _code_to_item(self, s: str) -> Tuple[int, str]:
         """Converts an IdleRPG item code to a tuple of (level, name)."""
         match = re.match(r"(\d+)(.?)", s)
         if not match:
             log.error(f"invalid item code: {s}")
+            return (int(s), "")
         lvl = int(match[1])
         if match[2]:
             return (lvl, [k for k,v in IdleRPGGameStorage.ITEMCODES.items() if v == match[2]][0])
         return (lvl, "")
 
 
-    def _item_to_code(self, level, name):
+    def _item_to_code(self, level: int, name: str) -> str:
         """Converts an item level and name to an IdleRPG item code."""
         return f"{level}{IdleRPGGameStorage.ITEMCODES.get(name, '')}"
 
 
-    def __init__(self, dbpath):
+    def __init__(self, dbpath: str):
         self._dbpath = dbpath
         self._cache = []
 
 
-    def create(self):
+    def create(self) -> None:
         """Creates a new IdleRPG db."""
         self.write([])
 
 
-    def exists(self):
+    def exists(self) -> bool:
         """Returns true if the db file exists."""
         return os.path.exists(self._dbpath)
 
 
-    def backup(self):
+    def close(self) -> None:
+        """Does nothing - no need to close the idlerpg file."""
+        pass
+
+
+    def backup(self) -> None:
         """Backs up database to a directory."""
         os.makedirs(datapath(conf.get("backupdir")), exist_ok=True)
         backup_path = os.path.join(datapath(conf.get("backupdir")),
@@ -358,7 +417,7 @@ class IdleRPGGameStorage(GameStorage):
         shutil.copyfile(self._dbpath, backup_path)
 
 
-    def _player_to_record(self, p):
+    def _player_to_record(self, p: Player) -> str:
         """Converts the player to an IdleRPG db record."""
         return "\t".join([
             p.name,
@@ -396,7 +455,7 @@ class IdleRPGGameStorage(GameStorage):
         ]) + "\n"
 
 
-    def readall(self):
+    def readall(self) -> Iterable[Player]:
         """Reads all the players into a dict."""
         self._cache = []
         with open(self._dbpath) as inf:
@@ -420,15 +479,15 @@ class IdleRPGGameStorage(GameStorage):
 
                 # convert int fields
                 for f in ["level", "nextlvl", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "penquest", "penlogout", "created", "lastlogin"]:
-                    d[f] = round(float(d[f]))
+                    d[f] = round(float(d[f])) # type:ignore
                 # convert boolean fields
                 for f in ["isadmin", "online"]:
-                    d[f] = (d[f] == '1')
+                    d[f] = (d[f] == '1') # type:ignore
 
-                d['pendropped'] = 0 # unsupported in saving
+                d['pendropped'] = 0 # type: ignore
 
-                d['created'] = datetime.datetime.fromtimestamp(d['created'])
-                d['lastlogin'] = datetime.datetime.fromtimestamp(d['lastlogin'])
+                d['created'] = datetime.datetime.fromtimestamp(int(d['created'])) # type:ignore
+                d['lastlogin'] = datetime.datetime.fromtimestamp(int(d['lastlogin'])) # type:ignore
 
                 p = Player.from_dict(d)
                 p.items = items
@@ -436,7 +495,7 @@ class IdleRPGGameStorage(GameStorage):
         return self._cache
 
 
-    def write(self, players):
+    def write(self, players: Iterable[Player]) -> None:
         """Writes players to an IdleRPG db."""
         with open(self._dbpath, "w") as ouf:
             ouf.write("# " + "\t".join(IdleRPGGameStorage.IRPG_FIELDS) + "\n")
@@ -444,27 +503,27 @@ class IdleRPGGameStorage(GameStorage):
                 ouf.write(self._player_to_record(p))
 
 
-    def new(self, p):
+    def new(self, p: Player) -> None:
         """Creates a new player in the db."""
         self._cache.append(p)
         with open(self._dbpath, "a") as ouf:
             ouf.write(self._player_to_record(p))
 
 
-    def rename_player(self, old_name, new_name):
+    def rename_player(self, old_name: str, new_name: str) -> None:
         """Renames a player in the db."""
         # Presumably the player in the cache has changed its name, so
         # just write out the file.
         self.write([])
 
 
-    def delete_player(self, pname):
+    def delete_player(self, pname:str) -> None:
         """Removes a player from the db."""
-        self._cache.remove(pname)
+        self._cache = [p for p in self._cache if p.name != pname]
         self.write([])
 
 
-    def add_history(self, pnames, text):
+    def add_history(self, pnames: List[str], text: str) -> None:
         """Adds history text for the player.
 
         IdleRPG dumps all history into a single modsfile, which is
@@ -475,7 +534,7 @@ class IdleRPGGameStorage(GameStorage):
             ouf.write(f"[{time.strftime('%m/%d/%y %H:%M:%S')}] {text}\n")
 
 
-    def read_quest(self):
+    def read_quest(self) -> Optional[Quest]:
         """Returns stored Quest object or None."""
         if not conf.get("writequestfile"):
             return None
@@ -496,14 +555,14 @@ class IdleRPGGameStorage(GameStorage):
                     else:
                         q.stage = int(val)
                 elif key == "P":
-                    for pair in grouper(val.split(' ')):
-                        q.dests.append((p[0], p[1]))
+                    for pair in chunk.chunk(val.split(' '), 2):
+                        q.dests.append((int(pair[0]), int(pair[1])))
                 elif re.match("P\d", key):
                     q.questor_names.append(val)
             return q
 
 
-    def update_quest(self, quest):
+    def update_quest(self, quest: Optional[Quest]) -> None:
         """Updates quest information in store."""
         if not conf.get("writequestfile"):
             return
@@ -533,8 +592,11 @@ class Sqlite3GameStorage(GameStorage):
     FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment"]
 
 
+    _dbpath: str
+    _db: Optional[sqlite3.Connection]
+
     @staticmethod
-    def dict_factory(cursor, row):
+    def dict_factory(cursor: sqlite3.Cursor, row: sqlite3.Row) -> Dict[str, str]:
         """Converts a sqlite3 row into a dict."""
         d = {}
         for idx, col in enumerate(cursor.description):
@@ -542,7 +604,7 @@ class Sqlite3GameStorage(GameStorage):
         return d
 
 
-    def _connect(self):
+    def _connect(self) -> sqlite3.Connection:
         """Connects to the sqlite3 db if not already connected."""
         if self._db is None:
             self._db = sqlite3.connect(self._dbpath)
@@ -551,48 +613,46 @@ class Sqlite3GameStorage(GameStorage):
         return self._db
 
 
-    def __init__(self, dbpath):
+    def __init__(self, dbpath: str):
         self._dbpath = dbpath
         self._db = None
 
 
-    def create(self):
+    def create(self) -> None:
         """Initializes a new db."""
-        with self._connect() as cur:
-            cur.execute(f"create table dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)})")
-            cur.execute('create table dawdle_item (id, owner_id, slot, level, name, CONSTRAINT "unique_item_owner_slot" UNIQUE ("owner_id", "slot"))')
-            cur.execute("create table dawdle_history (id, owner_id, time, text)")
-            cur.execute("create table dawdle_quest (id, mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
-            cur.execute("insert into dawdle_quest (mode) values (0)")
+        with self._connect() as con:
+            con.execute(f"create table dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)})")
+            con.execute('create table dawdle_item (id, owner_id, slot, level, name, CONSTRAINT "unique_item_owner_slot" UNIQUE ("owner_id", "slot"))')
+            con.execute("create table dawdle_history (id, owner_id, time, text)")
+            con.execute("create table dawdle_quest (id, mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
+            con.execute("insert into dawdle_quest (mode) values (0)")
 
 
-    def clear(self):
+    def clear(self) -> None:
         """Destroys all data in the db without deleting it."""
-        with self._connect() as cur:
-            cur.execute("delete from dawdle_player")
-            cur.execute("delete from dawdle_item")
-            cur.execute("delete from dawdle_history")
-            cur.execute("delete from dawdle_quest")
+        with self._connect() as con:
+            con.execute("delete from dawdle_player")
+            con.execute("delete from dawdle_item")
+            con.execute("delete from dawdle_history")
+            con.execute("delete from dawdle_quest")
 
 
-    def exists(self):
+    def exists(self) -> bool:
         """Returns True if the db exists."""
         return os.path.exists(self._dbpath)
 
 
-    def backup(self):
+    def backup(self) -> None:
         """Backs up database to a directory."""
         os.makedirs(datapath(conf.get("backupdir")), exist_ok=True)
         with self._connect() as con:
             backup_path = os.path.join(datapath(conf.get("backupdir")),
                                        f"{time.strftime('%Y-%m-%dT%H:%M:%S')}-{os.path.basename(conf.get('dbfile'))}")
-            backup_db = sqlite3.connect(backup_path)
-            with backup_db:
-                self._db.backup(backup_db)
-            backup_db.close()
+            with sqlite3.connect(backup_path) as backup_db:
+                con.backup(backup_db)
 
 
-    def readall(self):
+    def readall(self) -> Iterable[Player]:
         """Reads all the players from the db."""
         players = {}
         with self._connect() as con:
@@ -607,65 +667,66 @@ class Sqlite3GameStorage(GameStorage):
         return players.values()
 
 
-    def write(self, players):
+    def write(self, players: Iterable[Player]) -> None:
         """Writes player information into the db."""
-        with self._connect() as cur:
+        with self._connect() as con:
             sql_fields = ",".join(Sqlite3GameStorage.FIELDS)
             p_fields = ",".join([":"+k for k in Sqlite3GameStorage.FIELDS])
-            cur.executemany(f"replace into dawdle_player ({sql_fields}) values ({p_fields})",
+            con.executemany(f"replace into dawdle_player ({sql_fields}) values ({p_fields})",
                             [vars(p) for p in players])
             item_updates = []
             for p in players:
                 for slot, item in p.items.items():
                     item_updates.append((p.name, slot, item.level, item.name))
-            cur.executemany("replace into dawdle_item (owner_id, slot, level, name) values (:owner, :slot, :level, :name)",
+            con.executemany("replace into dawdle_item (owner_id, slot, level, name) values (:owner, :slot, :level, :name)",
                             item_updates)
 
 
-    def close(self):
+    def close(self) -> None:
         """Finish using db."""
+        assert self._db is not None
         self._db.close()
 
 
-    def new(self, p):
+    def new(self, p: Player) -> None:
         """Create new character in db."""
-        with self._connect() as cur:
+        with self._connect() as con:
             d = vars(p)
-            cur.execute(f"insert into dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)}) values ({('?, ' * len(Sqlite3GameStorage.FIELDS))[:-2]})",
+            con.execute(f"insert into dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)}) values ({('?, ' * len(Sqlite3GameStorage.FIELDS))[:-2]})",
                         [d[k] for k in Sqlite3GameStorage.FIELDS])
-            cur.commit()
+            con.commit()
 
 
-    def rename_player(self):
+    def rename_player(self, old_name: str, new_name: str) -> None:
         """Rename player in db."""
-        with self._connect() as cur:
-            cur.execute("update dawdle_player set name = ? where name = ?", (new_name, old_name))
-            cur.commit()
+        with self._connect() as con:
+            con.execute("update dawdle_player set name = ? where name = ?", (new_name, old_name))
+            con.commit()
 
 
-    def delete_player(self):
+    def delete_player(self, pname: str) -> None:
         """Remove player from db."""
-        with self._connect() as cur:
-            cur.execute("delete from dawdle_player where name = ?", (pname,))
-            cur.commit()
+        with self._connect() as con:
+            con.execute("delete from dawdle_player where name = ?", (pname,))
+            con.commit()
 
 
-    def bulk_history_insert(self, history):
+    def bulk_history_insert(self, history: List[Tuple[str, str, str]]) -> None:
         """Inserts (owner, time, text) tuples into history db."""
-        with self._connect() as cur:
-            cur.executemany("insert into dawdle_history (owner_id, time, text) values (?, datetime(?), ?)", history)
+        with self._connect() as con:
+            con.executemany("insert into dawdle_history (owner_id, time, text) values (?, datetime(?), ?)", history)
 
 
-    def add_history(self, pnames, text, time='now'):
+    def add_history(self, pnames: List[str], text: str, time: str='now') -> None:
         """Adds history text for the player."""
-        with self._connect() as cur:
-            cur.executemany("insert into dawdle_history (owner_id, time, text) values (?, datetime(?), ?)",
+        with self._connect() as con:
+            con.executemany("insert into dawdle_history (owner_id, time, text) values (?, datetime(?), ?)",
                             [(pname, time, text) for pname in pnames])
 
 
-    def read_quest(self):
-        with self._connect() as cur:
-            cur = cur.execute("select * from dawdle_quest")
+    def read_quest(self) -> Optional[Quest]:
+        with self._connect() as con:
+            cur = con.execute("select * from dawdle_quest")
             res = cur.fetchone()
             if not res or res['mode'] == 0:
                 return None
@@ -682,15 +743,15 @@ class Sqlite3GameStorage(GameStorage):
             return q
 
 
-    def update_quest(self, quest):
+    def update_quest(self, quest: Optional[Quest]) -> None:
         """Updates quest information in store."""
-        with self._connect() as cur:
+        with self._connect() as con:
             if not quest:
-                cur.execute("update dawdle_quest set mode = 0")
-                cur.commit()
+                con.execute("update dawdle_quest set mode = 0")
+                con.commit()
                 return
             if quest.mode == 1:
-                cur.execute("update dawdle_quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, qtime=?",
+                con.execute("update dawdle_quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, qtime=?",
                             (quest.mode,
                              quest.text,
                              quest.questors[0].name,
@@ -699,7 +760,7 @@ class Sqlite3GameStorage(GameStorage):
                              quest.questors[3].name,
                              quest.qtime))
             else:
-                cur.execute("update dawdle_quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, stage=?, dest1x=?, dest1y=?, dest2x=?, dest2y=?",
+                con.execute("update dawdle_quest set mode=?, text=?, p1=?, p2=?, p3=?, p4=?, stage=?, dest1x=?, dest1y=?, dest2x=?, dest2y=?",
                             (quest.mode,
                              quest.text,
                              quest.questors[0].name,
@@ -711,47 +772,55 @@ class Sqlite3GameStorage(GameStorage):
                              quest.dests[0][1],
                              quest.dests[1][0],
                              quest.dests[1][1]))
-            cur.commit()
+            con.commit()
 
 
 class GameDB(object):
     """Class to manage a collection of Players."""
 
-    def __init__(self, store):
+    _store: GameStorage
+    _players: Dict[str, Player]
+
+    def __init__(self, store: GameStorage):
         self._store = store
         self._players = {}
 
-    def __getitem__(self, pname):
+    def __getitem__(self, pname: str) -> Player:
         """Return a player by name."""
         return self._players[pname]
 
 
-    def __contains__(self, pname):
+    def __contains__(self, pname: str) -> bool:
         """Returns True if the player is in the db."""
         return pname in self._players
 
 
-    def create(self):
+    def create(self) -> None:
         """Creates a new database from scratch."""
         self._store.create()
 
 
-    def close(self):
+    def clear(self) -> None:
+        """Reinitializes the new database."""
+        self._store.clear()
+
+
+    def close(self) -> None:
         """Close the underlying db.  Used for testing."""
         self._store.close()
 
 
-    def exists(self):
+    def exists(self) -> bool:
         """Returns True if the underlying store exists."""
         return self._store.exists()
 
 
-    def backup_store(self):
+    def backup_store(self) -> None:
         """Backup store into another file."""
         self._store.backup()
 
 
-    def load_state(self):
+    def load_state(self) -> None:
         """Load all players from database into memory"""
         for p in self._store.readall():
             self._players[p.name] = p
@@ -760,14 +829,15 @@ class GameDB(object):
             self._quest.questors = [self._players[pname] for pname in self._quest.questor_names]
 
 
-    def write_players(self, players=None):
+    def write_players(self, players: Optional[List[Player]]=None) -> None:
         """Write player objects into database.  Defaults to all."""
         if players is None:
-            players = self._players.values()
-        self._store.write(players)
+            self._store.write(self._players.values())
+        else:
+            self._store.write(players)
 
 
-    def new_player(self, pname, pclass, ppass):
+    def new_player(self, pname: str, pclass: str, ppass: str) -> Player:
         """Create a new player with the name, class, and password."""
         if pname in self._players:
             raise KeyError
@@ -779,7 +849,7 @@ class GameDB(object):
         return p
 
 
-    def rename_player(self, old_name, new_name):
+    def rename_player(self, old_name: str, new_name: str) -> None:
         """Rename a player in the db."""
         self._players[new_name] = self._players[old_name]
         self._players[new_name].name = new_name
@@ -787,13 +857,13 @@ class GameDB(object):
         self._store.rename_player(old_name, new_name)
 
 
-    def delete_player(self, pname):
+    def delete_player(self, pname: str) -> None:
         """Remove a player from the db."""
         self._players.pop(pname)
         self._store.delete_player(pname)
 
 
-    def from_user(self, user):
+    def from_user(self, user: abstract.AbstractClient.User) -> Optional[Player]:
         """Find the given online player with the irc user."""
         # The "userhost" includes the nick so it's still matching the
         # nick.
@@ -803,43 +873,43 @@ class GameDB(object):
         return None
 
 
-    def add_history(self, players, text):
+    def add_history(self, players: List[Player], text: str) -> None:
         """Add text to the players' history."""
         self._store.add_history([p.name for p in players], text)
 
 
-    def update_quest(self, quest):
+    def update_quest(self, quest: Optional[Quest]) -> None:
         self._store.update_quest(quest)
 
 
-    def check_login(self, pname, ppass):
+    def check_login(self, pname: str, ppass: str) -> bool:
         """Return True if name and password are a valid login."""
         result = (pname in self._players)
         result = result and compare_hash(self._players[pname].pw, crypt.crypt(ppass, self._players[pname].pw))
         return result
 
 
-    def count_players(self):
+    def count_players(self) -> int:
         """Return number of all players registered."""
         return len(self._players)
 
 
-    def online_players(self):
+    def online_players(self) -> List[Player]:
         """Return all active, online players."""
         return [p for p in self._players.values() if p.online]
 
 
-    def max_player_power(self):
+    def max_player_power(self) -> int:
         """Return the itemsum of the most powerful player."""
         return max([p.itemsum() for p in self._players.values()])
 
 
-    def top_players(self):
+    def top_players(self) -> List[Player]:
         """Return the top three players."""
         return sorted(self._players.values(), key=lambda p: (-p.level, p.nextlvl))[:3]
 
 
-    def inactive_since(self, expire):
+    def inactive_since(self, expire: int) -> List[Player]:
         """Return all players that have been inactive since a point in time."""
         return [p for p in self._players.values() if not p.online and p.lastlogin.timestamp() < expire]
 
@@ -848,20 +918,7 @@ class GameDB(object):
 SpecialItem = collections.namedtuple('SpecialItem', ['minlvl', 'itemlvl', 'lvlspread', 'kind', 'name', 'flavor'])
 
 
-class Quest(object):
-    """Class for tracking quests."""
-    def __init__(self):
-        # TODO: This is an ugly hack to support deserialization.
-        self.questor_names = []
-        self.questors = None
-        self.mode = None
-        self.text = None
-        self.qtime = None
-        self.stage = None
-        self.dests = []
-
-
-class DawdleBot(object):
+class DawdleBot(abstract.AbstractBot):
     """Class implementing the game."""
 
     # Commands in ALLOWALL can be used by anyone.
@@ -903,7 +960,22 @@ class DawdleBot(object):
         "trigger": "trigger calamity|godsend|hog|teambattle|evilness|goodness|battle: Triggers the event."
     }
 
-    def __init__(self, db):
+
+    _irc: Optional[abstract.AbstractClient]
+    _db: GameDB
+    _state: Literal["disconnected", "connected", "ready"]
+    _quest: Optional[Quest]
+    _qtimer: int
+    _silence: Set[str]
+    _pause: bool
+    _last_reg_time: float
+    _events: Dict[str, List[str]]
+    _events_loaded: int
+    _new_accounts: int
+    _gametick_task: Optional[asyncio.Task] # type: ignore
+
+
+    def __init__(self, db: GameDB) -> None:
         self._irc = None             # irc connection
         self._db = db           # the player database
         self._state = 'disconnected' # connected, disconnected, or ready
@@ -915,24 +987,26 @@ class DawdleBot(object):
         self._events = {}       # pre-parsed contents of events file
         self._events_loaded = 0 # time the events file was loaded, to detect file changes
         self._new_accounts = 0  # number of new accounts created since startup
-        self._overrides = {}
+        self._gametick_task = None
 
 
-    def connected(self, irc):
+    def connected(self, irc: abstract.AbstractClient) -> None:
         """Called when connected to IRC."""
         self._irc = irc
         self._state = 'connected'
 
 
-    def chanmsg(self, text):
+    def chanmsg(self, text: str) -> None:
         """Send a message to the bot channel."""
+        assert self._irc is not None
         if 'chanmsgs' in self._silence:
             return
         self._irc.chanmsg(text)
 
 
-    def logchanmsg(self, players, text):
+    def logchanmsg(self, players: List[Player], text: str) -> None:
         """Send a message to the bot channel and attach it to each player's history."""
+        assert self._irc is not None
         if 'chanmsgs' in self._silence:
             return
         self._irc.chanmsg(text)
@@ -941,15 +1015,17 @@ class DawdleBot(object):
         self._db.add_history(players, text)
 
 
-    def notice(self, nick, text):
+    def notice(self, nick: str, text: str) -> None:
         """Send a notice to a given nick."""
+        assert self._irc is not None
         if 'notices' in self._silence:
             return
         self._irc.notice(nick, text)
 
 
-    def ready(self):
+    def ready(self) -> None:
         """Called when bot has finished joining channel."""
+        assert self._irc is not None
         self._state = 'ready'
         self.refresh_events()
         autologin = []
@@ -967,33 +1043,21 @@ class DawdleBot(object):
         else:
             self.chanmsg("0 users qualified for auto login.")
         self._gametick_task = asyncio.create_task(self.gametick_loop())
-        self._qtimer = time.time() + rand.randint('qtimer_init',
-                                                  conf.get("quest_interval_min"),
-                                                  conf.get("quest_interval_max"))
+        self._qtimer = int(time.time()) + rand.randint('qtimer_init',
+                                                       conf.get("quest_interval_min"),
+                                                       conf.get("quest_interval_max"))
 
 
-    def acquired_ops(self):
+    def acquired_ops(self) -> None:
         """Called when the bot has acquired ops status on the channel."""
+        assert self._irc is not None
         if not conf.get("voiceonlogin") or self._state != 'ready':
             return
 
-        online_nicks = set([p.nick for p in self._db.online_players()])
-        add_voice = []
-        remove_voice = []
-        for u in self._irc._users.keys():
-            if 'v' in self._irc._users[u].modes:
-                if u not in online_nicks:
-                    remove_voice.append(u)
-            else:
-                if u in online_nicks:
-                    add_voice.append(u)
-        if add_voice:
-            self._irc.grant_voice(*add_voice)
-        if remove_voice:
-            self._irc.revoke_voice(*remove_voice)
+        self._irc.set_channel_voices([p.nick for p in self._db.online_players()])
 
 
-    def disconnected(self):
+    def disconnected(self) -> None:
         """Called when the bot has been disconnected."""
         self._irc = None
         self._state = 'disconnected'
@@ -1002,8 +1066,9 @@ class DawdleBot(object):
             self._gametick_task = None
 
 
-    def private_message(self, user, text):
+    def private_message(self, user: abstract.AbstractClient.User, text: str) -> None:
         """Called when private message received."""
+        assert self._irc is not None
         if text == '':
             return
         if self._state != "ready":
@@ -1031,21 +1096,21 @@ class DawdleBot(object):
             self.notice(user.nick, f"'{cmd} isn't actually a command.")
 
 
-    def channel_message(self, user, text):
+    def channel_message(self, user: abstract.AbstractClient.User, text: str) -> None:
         """Called when channel message received."""
         player = self._db.from_user(user)
         if player:
             self.penalize(player, "message", text)
 
 
-    def channel_notice(self, user, text):
+    def channel_notice(self, user: abstract.AbstractClient.User, text: str) -> None:
         """Called when channel notice received."""
         player = self._db.from_user(user)
         if player:
             self.penalize(player, "message", text)
 
 
-    def nick_changed(self, user, new_nick):
+    def nick_changed(self, user: abstract.AbstractClient.User, new_nick: str) -> None:
         """Called when someone on channel changed nick."""
         player = self._db.from_user(user)
         if player:
@@ -1053,7 +1118,7 @@ class DawdleBot(object):
             self.penalize(player, "nick")
 
 
-    def nick_parted(self, user):
+    def nick_parted(self, user: abstract.AbstractClient.User) -> None:
         """Called when someone left the channel."""
         player = self._db.from_user(user)
         if player:
@@ -1063,21 +1128,21 @@ class DawdleBot(object):
             self._db.write_players([player])
 
 
-    def netsplit(self, user):
+    def netsplit(self, user: abstract.AbstractClient.User) -> None:
         """Called when someone was netsplit."""
         player = self._db.from_user(user)
         if player:
             player.lastlogin = datetime.datetime.now()
 
 
-    def nick_dropped(self, user):
+    def nick_dropped(self, user: abstract.AbstractClient.User) -> None:
         """Called when someone was disconnected."""
         player = self._db.from_user(user)
         if player:
             player.lastlogin = datetime.datetime.now()
 
 
-    def nick_quit(self, user):
+    def nick_quit(self, user: abstract.AbstractClient.User) -> None:
         """Called when someone quit IRC intentionally."""
         player = self._db.from_user(user)
         if player:
@@ -1087,7 +1152,7 @@ class DawdleBot(object):
             self._db.write_players([player])
 
 
-    def nick_kicked(self, user):
+    def nick_kicked(self, user: abstract.AbstractClient.User) -> None:
         """Called when someone was kicked."""
         player = self._db.from_user(user)
         if player:
@@ -1097,7 +1162,7 @@ class DawdleBot(object):
             self._db.write_players([player])
 
 
-    def cmd_align(self, player, nick, args):
+    def cmd_align(self, player: Player, nick: str, args: str) -> None:
         """change alignment of character."""
         if args not in ["good", "neutral", "evil"]:
             self.notice(nick, "Try: ALIGN good|neutral|evil")
@@ -1107,7 +1172,7 @@ class DawdleBot(object):
         self._db.write_players([player])
 
 
-    def cmd_help(self, player, nick, args):
+    def cmd_help(self, player: Player, nick: str, args: str) -> None:
         """get help."""
         if args:
             if args in DawdleBot.CMDHELP:
@@ -1126,13 +1191,14 @@ class DawdleBot(object):
             self.notice(nick, f"Player help is at {conf.get('helpurl')} ; admin help is at {conf.get('admincommurl')}")
 
 
-    def cmd_version(self, player, nick, args):
+    def cmd_version(self, player: Player, nick: str, args: str) -> None:
         """display version information."""
         self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe")
 
 
-    def cmd_info(self, player, nick, args):
+    def cmd_info(self, player: Player, nick: str, args: str) -> None:
         """display bot information and admin list."""
+        assert self._irc is not None
         admins = [C('name', p.name) for p in self._db.online_players() if p.isadmin]
         if admins:
             admin_notice = f"Admin{plural(len(admins))} online: " + ", ".join(admins)
@@ -1141,43 +1207,44 @@ class DawdleBot(object):
         if not player or not player.isadmin:
             if conf.get("allowuserinfo"):
                 self.notice(nick, f"DawdleRPG v{VERSION} by Daniel Lowe, "
-                            f"On via server: {self._irc._server}. "
+                            f"On via server: {self._irc.servername()}. "
                             f"{admin_notice}")
             else:
                 self.notice(nick, "You cannot do 'info'.")
             return
 
         online_count = len(self._db.online_players())
-        q_bytes = sum([len(b) for b in self._irc._writeq])
+        q_msgs = self._irc.writeq_len()
+        q_bytes = self._irc.writeq_bytes()
         if self._silence:
             silent_mode = ','.join(self._silence)
         else:
             silent_mode = 'off'
         self.notice(nick,
-                    f"{self._irc._bytes_sent / 1024:.2f}kiB sent, "
-                    f"{self._irc._bytes_received / 1024:.2f}kiB received "
-                    f"in {duration(time.time() - start_time)}. "
+                    f"{self._irc.bytes_sent() / 1024:.2f}kiB sent, "
+                    f"{self._irc.bytes_received() / 1024:.2f}kiB received "
+                    f"in {duration(int(time.time() - start_time))}. "
                     f"{online_count} player{plural(online_count)} online of "
                     f"{self._db.count_players()} total users. "
                     f"{self._new_accounts} account{plural(self._new_accounts)} created since startup. "
                     f"PAUSE_MODE is {'on' if self._pause else 'off'}, "
                     f"SILENT_MODE is {silent_mode}. "
                     f"Outgoing queue is {q_bytes} byte{plural(q_bytes)} "
-                    f"in {len(self._irc._writeq)} item{plural(len(self._irc._writeq))}. "
-                    f"On via: {self._irc._server}. {admin_notice}")
+                    f"in {q_msgs} item{plural(q_msgs)}. "
+                    f"On via: {self._irc.servername()}. {admin_notice}")
 
 
-    def cmd_whoami(self, player, nick, args):
+    def cmd_whoami(self, player: Player, nick: str, args: str) -> None:
         """display game character information."""
         self.notice(nick, f"You are {C('name', player.name)}, the level {player.level} {player.cclass}. Next level in {duration(player.nextlvl)}.")
 
 
-    def cmd_announce(self, player, nick, args):
+    def cmd_announce(self, player: Player, nick: str, args: str) -> None:
         """Send a message to the channel via the bot."""
         self.chanmsg(args)
 
 
-    def cmd_status(self, player, nick, args):
+    def cmd_status(self, player: Player, nick: str, args: str) -> None:
         """get status on player."""
         if not conf.get("statuscmd"):
             self.notice(nick, "You cannot do 'status'.")
@@ -1197,9 +1264,10 @@ class DawdleBot(object):
                     f"Item sum: {t.itemsum()}")
 
 
-    def cmd_login(self, player, nick, args):
+    def cmd_login(self, player: Player, nick: str, args: str) -> None:
         """start playing as existing character."""
-        if nick not in self._irc._users:
+        assert self._irc is not None
+        if not self._irc.user_exists(nick):
             self.notice(nick, f"Sorry, you aren't on {conf.get('botchan')}.")
             return
         if player and self._irc.match_user(player.nick, player.userhost):
@@ -1221,7 +1289,9 @@ class DawdleBot(object):
         if conf.get("voiceonlogin") and self._irc.bot_has_ops():
             self._irc.grant_voice(nick)
         p = self._db[pname]
-        p.userhost = self._irc._users[nick].userhost
+        userhost = self._irc.nick_userhost(nick)
+        assert userhost is not None
+        p.userhost = userhost
         p.lastlogin = datetime.datetime.now()
         if p.online and p.nick == nick:
             # If the player was already online and they have the same
@@ -1235,12 +1305,13 @@ class DawdleBot(object):
         self._db.write_players([p])
 
 
-    def cmd_register(self, player, nick, args):
+    def cmd_register(self, player: Player, nick: str, args: str) -> None:
         """start game as new player."""
+        assert self._irc is not None
         if player:
             self.notice(nick, f"Sorry, you are already online as {C('name', player.name)}")
             return
-        if nick not in self._irc._users:
+        if not self._irc.user_exists(nick):
             self.notice(nick, f"Sorry, you aren't on {conf.get('botchan')}")
             return
         if self._pause:
@@ -1263,7 +1334,7 @@ class DawdleBot(object):
         pname, ppass, pclass = parts
         if pname in self._db:
             self.notice(nick, "Sorry, that character name is already in use.")
-        elif pname == self._irc._nick or pname == conf.get("botnick"):
+        elif self._irc.is_bot_nick(pname):
             self.notice(nick, "That character name cannot be registered.")
         elif len(parts[1]) < 1 or len(pname) > conf.get("max_name_len"):
             self.notice(nick, f"Sorry, character names must be between 1 and {conf.get('max_name_len')} characters long.")
@@ -1279,7 +1350,9 @@ class DawdleBot(object):
             player = self._db.new_player(pname, pclass, ppass)
             player.online = True
             player.nick = nick
-            player.userhost = self._irc._users[nick].userhost
+            userhost = self._irc.nick_userhost(nick)
+            assert userhost is not None
+            player.userhost = userhost
             player.posx = rand.randint("new_player_posy", 0, conf.get("mapx"))
             player.posy = rand.randint("new_player_posy", 0, conf.get("mapy"))
 
@@ -1291,8 +1364,9 @@ class DawdleBot(object):
             self._new_accounts += 1
 
 
-    def cmd_removeme(self, player, nick, args):
+    def cmd_removeme(self, player: Player, nick: str, args: str) -> None:
         """Delete own character."""
+        assert self._irc is not None
         if args == "":
             self.notice(nick, "Try: REMOVEME <password>")
         elif not self._db.check_login(player.name, args):
@@ -1305,7 +1379,7 @@ class DawdleBot(object):
                 self._irc.revoke_voice(nick)
 
 
-    def cmd_newpass(self, player, nick, args):
+    def cmd_newpass(self, player: Player, nick: str, args: str) -> None:
         """change own password."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
@@ -1318,8 +1392,9 @@ class DawdleBot(object):
             self.notice(nick, "Your password was changed.")
 
 
-    def cmd_logout(self, player, nick, args):
+    def cmd_logout(self, player: Player, nick: str, args: str) -> None:
         """stop playing as character."""
+        assert self._irc is not None
         self.notice(nick, "You have been logged out.")
         player.online = False
         player.lastlogin = datetime.datetime.now()
@@ -1329,13 +1404,13 @@ class DawdleBot(object):
         self.penalize(player, "logout")
 
 
-    def cmd_backup(self, player, nick, args):
+    def cmd_backup(self, player: Player, nick: str, args: str) -> None:
         """copy database file to a backup directory."""
         self._db.backup_store()
         self.notice(nick, "Player database backed up.")
 
 
-    def cmd_chclass(self, player, nick, args):
+    def cmd_chclass(self, player: Player, nick: str, args: str) -> None:
         """change another player's character class."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
@@ -1351,7 +1426,7 @@ class DawdleBot(object):
             self.notice(nick, f"{parts[0]}'s character class is now '{parts[1]}'.")
 
 
-    def cmd_chpass(self, player, nick, args):
+    def cmd_chpass(self, player: Player, nick: str, args: str) -> None:
         """change another player's password."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
@@ -1363,7 +1438,7 @@ class DawdleBot(object):
             self.notice(nick, f"{parts[0]}'s password changed.")
 
 
-    def cmd_chuser(self, player, nick, args):
+    def cmd_chuser(self, player: Player, nick: str, args: str) -> None:
         """Change someone's username."""
         parts = args.split(' ', 1)
         if len(parts) != 2:
@@ -1383,7 +1458,7 @@ class DawdleBot(object):
             self.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
 
 
-    def cmd_config(self, player, nick, args):
+    def cmd_config(self, player: Player, nick: str, args: str) -> None:
         """View/set a configuration setting."""
         if args == "":
             self.notice(nick, "Try: CONFIG <key search> or CONFIG <key> <value>")
@@ -1404,13 +1479,14 @@ class DawdleBot(object):
         self.notice(nick, f"{parts[0]} set to {val}.")
 
 
-    def cmd_clearq(self, player, nick, args):
+    def cmd_clearq(self, player: Player, nick: str, args: str) -> None:
         """Clear outgoing message queue."""
-        self._irc._writeq = []
+        assert self._irc is not None
+        self._irc.clear_writeq()
         self.notice(nick, "Output queue cleared.")
 
 
-    def cmd_del(self, player, nick, args):
+    def cmd_del(self, player: Player, nick: str, args: str) -> None:
         """Delete another player's account."""
         if args not in self._db:
             self.notice(nick, f"{args} is not a valid account.")
@@ -1419,7 +1495,7 @@ class DawdleBot(object):
             self.notice(nick, f"{args} has been deleted.")
 
 
-    def cmd_deladmin(self, player, nick, args):
+    def cmd_deladmin(self, player: Player, nick: str, args: str) -> None:
         """Remove admin authority."""
         if args not in self._db:
             self.notice(nick, f"{args} is not a valid account.")
@@ -1433,7 +1509,7 @@ class DawdleBot(object):
             self.notice(nick, f"{args} is no longer an admin.")
 
 
-    def cmd_delold(self, player, nick, args):
+    def cmd_delold(self, player: Player, nick: str, args: str) -> None:
         """Remove players not accessed in a number of days."""
         if not re.match(r"\d+", args):
             self.notice(nick, "Try DELOLD <# of days>")
@@ -1450,20 +1526,22 @@ class DawdleBot(object):
                      f"in the last {days} days removed by {C('name', player.name)}.")
 
 
-    def cmd_die(self, player, nick, args):
+    def cmd_die(self, player: Player, nick: str, args: str) -> None:
         """Shut down the bot."""
+        assert self._irc is not None
         self.notice(nick, "Shutting down.")
-        self._irc.quit()
+        log.info("%s (as %s) initiated shutdown.", player.name, nick)
+        self._irc.quit("Shutting down for maintenance.")
         sys.exit(0)
 
 
-    def cmd_jump(self, player, nick, args):
+    def cmd_jump(self, player: Player, nick: str, args: str) -> None:
         """Switch to new IRC server."""
         # Not implemented.
         pass
 
 
-    def cmd_mkadmin(self, player, nick, args):
+    def cmd_mkadmin(self, player: Player, nick: str, args: str) -> None:
         """Grant admin authority to player."""
         if args not in self._db:
             self.notice(nick, f"{args} is not a valid account.")
@@ -1475,7 +1553,7 @@ class DawdleBot(object):
             self.notice(nick, f"{args} is now an admin.")
 
 
-    def cmd_pause(self, player, nick, args):
+    def cmd_pause(self, player: Player, nick: str, args: str) -> None:
         """Toggle pause mode."""
         self._pause = not self._pause
         if self._pause:
@@ -1484,27 +1562,27 @@ class DawdleBot(object):
             self.notice(nick, "Pause mode disabled.")
 
 
-    def cmd_rehash(self, player, nick, args):
+    def cmd_rehash(self, player: Player, nick: str, args: str) -> None:
         """Re-read configuration file."""
         conf.read_config(conf.get("confpath"))
         self.notice(nick, "Configuration reloaded.")
 
 
-    def cmd_reloaddb(self, player, nick, args):
+    def cmd_reloaddb(self, player: Player, nick: str, args: str) -> None:
         """Reload the player database."""
         if not self._pause:
             self.notice(nick, "ERROR: can only use RELOADDB while in PAUSE mode.")
             return
-        self._db.load_players()
+        self._db.load_state()
 
 
-    def cmd_restart(self, player, nick, args):
+    def cmd_restart(self, player: Player, nick: str, args: str) -> None:
         """Restart from scratch."""
         # Not implemented.
         pass
 
 
-    def cmd_silent(self, player, nick, args):
+    def cmd_silent(self, player: Player, nick: str, args: str) -> None:
         """Set silent mode."""
         old_silence = self._silence
         self._silence = set()
@@ -1524,13 +1602,13 @@ class DawdleBot(object):
             self._silence = old_silence
 
 
-    def cmd_hog(self, player, nick, args):
+    def cmd_hog(self, player: Player, nick: str, args: str) -> None:
         """Trigger Hand of God."""
         self.chanmsg(f"{C('name', player.name)} has summoned the Hand of God.")
         self.hand_of_god(self._db.online_players())
 
 
-    def cmd_push(self, player, nick, args):
+    def cmd_push(self, player: Player, nick: str, args: str) -> None:
         """Push someone toward or away from their next level."""
         parts = args.split(' ')
         if len(parts) != 2 or not re.match(r'[+-]?\d+', parts[1]):
@@ -1559,7 +1637,7 @@ class DawdleBot(object):
                         f"in {duration(target.nextlvl)}.")
 
 
-    def cmd_trigger(self, player, nick, args):
+    def cmd_trigger(self, player: Player, nick: str, args: str) -> None:
         """Trigger in-game events"""
         if args == 'calamity':
             self.chanmsg(f"{C('name', player.name)} brings down ruin upon the land.")
@@ -1595,17 +1673,20 @@ class DawdleBot(object):
             self.quest_start(int(time.time()))
 
 
-    def cmd_quest(self, player, nick, args):
+    def cmd_quest(self, player: Player, nick: str, args: str) -> None:
         """Get information on current quest."""
+        assert self._irc is not None
         if self._quest is None:
             self.notice(nick, "There is no active quest.")
         elif self._quest.mode == 1:
+            assert self._quest.qtime is not None
             qp = self._quest.questors
             self.notice(nick,
                         f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                         f"are on a quest to {self._quest.text}. Quest to complete in "
-                        f"{duration(self._quest.qtime - time.time())}.")
+                        f"{duration(int(self._quest.qtime - time.time()))}.")
         elif self._quest.mode == 2:
+            assert self._quest.dests is not None
             qp = self._quest.questors
             mapnotice = ''
             if conf.has("mapurl"):
@@ -1617,7 +1698,7 @@ class DawdleBot(object):
                         f"({self._quest.dests[1][0]}, {self._quest.dests[1][1]}).{mapnotice}")
 
 
-    def penalize(self, player, kind, text=None):
+    def penalize(self, player: Player, kind: str, text: Optional[str]=None) -> None:
         """Exact penalities on a transgressing player."""
         penalty = conf.get("pen"+kind)
         if penalty == 0:
@@ -1657,7 +1738,7 @@ class DawdleBot(object):
             self.notice(player.nick, f"Penalty of {duration(penalty)} added to your timer for {pendesc}.")
 
 
-    def refresh_events(self):
+    def refresh_events(self) -> None:
         """Read events file if it has changed."""
         if self._events_loaded == os.path.getmtime(datapath(conf.get("eventsfile"))):
             return
@@ -1670,19 +1751,24 @@ class DawdleBot(object):
                     self._events.setdefault(line[0], []).append(line[1:].lstrip())
 
 
-    def expire_splits(self):
+    def expire_splits(self) -> None:
         """Kick players offline if they were disconnected for too long."""
+        assert self._irc is not None
         expiration = time.time() - conf.get("splitwait")
         dropped_players = []
         for p in self._db.online_players():
-            if p.nick not in self._irc._users and p.lastlogin.timestamp() < expiration:
-                log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
-                self.penalize(p, "dropped")
-                p.online = False
-                dropped_players.append(p)
+            if self._irc.user_exists(p.nick):
+                continue
+            if p.lastlogin.timestamp() > expiration:
+                continue
+            log.info("Expiring %s who was logged in as %s but was lost in a netsplit.", p.nick, p.name)
+            self.penalize(p, "dropped")
+            p.online = False
+            dropped_players.append(p)
+
         self._db.write_players(dropped_players)
 
-    async def gametick_loop(self):
+    async def gametick_loop(self) -> None:
         """Main gameplay loop to manage timing."""
         try:
             last_time = time.time() - 1
@@ -1696,7 +1782,7 @@ class DawdleBot(object):
             sys.exit(2)
 
 
-    def gametick(self, now, passed):
+    def gametick(self, now: int, passed: int) -> None:
         """Main gameplay routine."""
         if conf.get("detectsplits"):
             self.expire_splits()
@@ -1769,7 +1855,7 @@ class DawdleBot(object):
         self._db.write_players(op)
 
 
-    def hand_of_god(self, op):
+    def hand_of_god(self, op: List[Player]) -> None:
         """Hand of God that pushes a random player forword or back."""
         player = rand.choice('hog_player', op)
         amount = int(player.nextlvl * (5 + rand.randint('hog_amount', 0, 71))/100)
@@ -1783,7 +1869,7 @@ class DawdleBot(object):
         self._db.write_players([player])
 
 
-    def find_item(self, player):
+    def find_item(self, player: Player) -> None:
         """Find a random item and add to player if higher level."""
         # TODO: Convert to configuration
         # Note that order is important here - each item is less likely to be picked than the previous.
@@ -1839,7 +1925,7 @@ class DawdleBot(object):
                         f"so it seems Luck is against you.  You toss the {C('item', Item.DESC[slot])}.")
 
 
-    def pvp_battle(self, player, opp, flavor_start, flavor_win, flavor_loss):
+    def pvp_battle(self, player: Player, opp: Optional[Player], flavor_start: str, flavor_win: str, flavor_loss: str) -> None:
         """Enact a powerful player-vs-player battle."""
         if opp is None:
             oppname = conf.get("botnick")
@@ -1892,15 +1978,15 @@ class DawdleBot(object):
             self.find_item(player)
 
 
-    def challenge_opp(self, player):
+    def challenge_opp(self, player: Player) -> None:
         """Pit player against another random player."""
-        op = self._db.online_players()
+        op = cast(List[Optional[Player]], self._db.online_players())
         op.remove(player)       # Let's not fight ourselves
         op.append(None)         # This is the bot opponent
         self.pvp_battle(player, rand.choice('challenge_opp_choice', op), 'challenged', 'and won', 'and lost')
 
 
-    def team_battle(self, op):
+    def team_battle(self, op: List[Player]) -> None:
         """Have a 3-vs-3 battle between teams."""
         if len(op) < 6:
             return
@@ -1924,7 +2010,7 @@ class DawdleBot(object):
                 p.nextlvl += gain
 
 
-    def calamity(self):
+    def calamity(self) -> None:
         """Bring bad things to a random player."""
         player = rand.choice('calamity_target', self._db.online_players())
         if not player:
@@ -1932,7 +2018,7 @@ class DawdleBot(object):
 
         if player.items and rand.randomly('calamity_item_damage', 10):
             # Item damaging calamity
-            slot = rand.choice('calamity_slot', player.items.keys())
+            slot = rand.choice('calamity_slot', sorted(player.items.keys()))
             if slot == "ring":
                 msg = f"{C('name', player.name)} accidentally smashed their {C('item', 'ring')} with a hammer!"
             elif slot == "amulet":
@@ -1967,7 +2053,7 @@ class DawdleBot(object):
             self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
 
-    def godsend(self):
+    def godsend(self) -> None:
         """Bring good things to a random player."""
         player = rand.choice('godsend_target', self._db.online_players())
         if not player:
@@ -1975,7 +2061,7 @@ class DawdleBot(object):
 
         if player.items and rand.randomly('godsend_item_improve', 10):
             # Item improving godsend
-            slot = rand.choice('godsend_slot', player.items.keys())
+            slot = rand.choice('godsend_slot', sorted(player.items.keys()))
             if slot == "ring":
                 msg = f"{C('name', player.name)} dipped their {C('item', 'ring')} into a sacred fountain!"
             elif slot == "amulet":
@@ -2011,7 +2097,7 @@ class DawdleBot(object):
             self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
 
-    def evilness(self, op):
+    def evilness(self, op: List[Player]) -> None:
         """Bring evil or an item to a random evil player."""
         evil_p = [p for p in op if p.alignment == 'e']
         if not evil_p:
@@ -2042,7 +2128,7 @@ class DawdleBot(object):
             if player.nextlvl > 0:
                 self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
-    def goodness(self, op):
+    def goodness(self, op: List[Player]) -> None:
         """Bring two good players closer to their next level."""
         good_p = [p for p in op if p.alignment == 'g']
         if len(good_p) < 2:
@@ -2060,7 +2146,7 @@ class DawdleBot(object):
                 self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
 
 
-    def move_players(self):
+    def move_players(self) -> None:
         """Move players around the map."""
         op = self._db.online_players()
         if not op:
@@ -2068,8 +2154,10 @@ class DawdleBot(object):
         rand.shuffle('move_players_order', op)
         mapx = conf.get("mapx")
         mapy = conf.get("mapy")
-        combatants = dict()
+        combatants: Dict[Tuple[int,int], Player] = dict()
         if self._quest and self._quest.mode == 2:
+            assert self._quest.stage is not None
+            assert self._quest.dests is not None
             destx = self._quest.dests[self._quest.stage-1][0]
             desty = self._quest.dests[self._quest.stage-1][1]
             for p in self._quest.questors:
@@ -2084,13 +2172,13 @@ class DawdleBot(object):
                 if distx != 0:
                     if abs(distx) > mapx/2:
                         distx = -distx
-                    xmove = distx / abs(distx) # normalize to -1/0/1
+                    xmove = int(distx / abs(distx)) # normalize to -1/0/1
 
                 disty = desty - p.posy
                 if disty != 0:
                     if abs(disty) > mapy/2:
                         disty = -disty
-                    ymove = disty / abs(disty) # normalize to -1/0/1
+                    ymove = int(disty / abs(disty)) # normalize to -1/0/1
 
                 p.posx = (p.posx + xmove) % mapx
                 p.posy = (p.posy + ymove) % mapy
@@ -2116,7 +2204,7 @@ class DawdleBot(object):
                 combatants[(p.posx, p.posy)] = p
 
 
-    def quest_start(self, now):
+    def quest_start(self, now: int) -> None:
         """Start a random quest with four random players."""
         latest_login_time = now - 36000
         qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin.timestamp() < latest_login_time]
@@ -2134,7 +2222,7 @@ class DawdleBot(object):
             quest_time = rand.randint('quest_time', 6, 12)*3600
             self._quest.mode = 1
             self._quest.text = match[2]
-            self._quest.qtime = time.time() + quest_time
+            self._quest.qtime = int(time.time()) + quest_time
             self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
                          f"been chosen by the gods to {self._quest.text}.  Quest to end in "
                          f"{duration(quest_time)}.")
@@ -2153,12 +2241,13 @@ class DawdleBot(object):
         self._db.update_quest(self._quest)
 
 
-    def quest_check(self, now):
+    def quest_check(self, now: int) -> None:
         """Complete quest if criteria are met."""
         if self._quest is None:
             if now >= self._qtimer:
                 self.quest_start(now)
         elif self._quest.mode == 1:
+            assert self._quest.qtime is not None
             if now >= self._quest.qtime:
                 qp = self._quest.questors
                 self.logchanmsg(qp,
@@ -2171,6 +2260,8 @@ class DawdleBot(object):
                 self._qtimer = now + conf.get("quest_interval_min")
                 self._db.update_quest(self._quest)
         elif self._quest.mode == 2:
+            assert self._quest.stage is not None
+            assert self._quest.dests is not None
             destx = self._quest.dests[self._quest.stage-1][0]
             desty = self._quest.dests[self._quest.stage-1][1]
             done = True
