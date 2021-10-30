@@ -1706,7 +1706,10 @@ class DawdleBot(abstract.AbstractBot):
             self.chanmsg(f"{C('name', player.name)} has called forth a gladitorial arena.")
             self.challenge_opp(rand.choice('triggered_battle', self._db.online_players()))
         elif args == 'mount':
-            non_mount_players = [p for p in self._db.online_players() if "mount" not in p.allies]
+            non_mount_players = [p for p in self._db.online_players() if p.level >= 40 and "mount" not in p.allies]
+            if not non_mount_players:
+                self.notice(nick, "No qualifying players available.")
+                return
             target = rand.choice("find_mount_player", non_mount_players)
             self.chanmsg(f"{C('name', player.name)} has called forth a mount for {target.name}.")
             self.find_mount(target)
