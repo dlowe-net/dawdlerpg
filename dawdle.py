@@ -195,7 +195,7 @@ def start_bot() -> None:
         sys.exit(0)
 
     if db.count_players() == 0:
-        sys.stderr.write(f"Zero players in {conf.get('dbfile')}.  Do you need to run with --setup?")
+        sys.stderr.write(f"Zero players in {conf.get('dbfile')}.  Do you need to run with --setup?\n")
         sys.exit(6)
 
     if conf.has("pidfile"):
