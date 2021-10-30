@@ -36,7 +36,7 @@ class MapView(View):
 
         q = Quest.objects.all()
         questors = None
-        if q:
+        if q and q[0].mode != 0:
             q = q[0]
             questors = [q.p1, q.p2, q.p3, q.p4]
         if 'player' in kwargs:
