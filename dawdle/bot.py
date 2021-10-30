@@ -994,7 +994,7 @@ class DawdleBot(abstract.AbstractBot):
         "silent": "silent <mode> - Sets silentmode to the given mode.",
         "hog": "hog - Triggers the Hand of God.",
         "push": "push <account> <seconds> - Adds seconds to the next level of account.",
-        "trigger": "trigger calamity|godsend|hog|teambattle|evilness|goodness|battle - Triggers the event.",
+        "trigger": "trigger calamity|godsend|hog|teambattle|evilness|goodness|battle|mount - Triggers the event.",
         "mname": "mname <mount name> - Sets the name of your mount."
     }
 
