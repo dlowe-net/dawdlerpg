@@ -765,7 +765,7 @@ class Sqlite3GameStorage(GameStorage):
             res = cur.fetchone()
             if not res:
                 # We should always have a quest object
-                con.execute("insert into dawdle_quest (mode, p1, p2, p3, p4) values (0, '', '', '', '')")
+                con.execute("insert into dawdle_quest (mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y) values (0, '', '', '', '', '', 0, 0, 0, 0, 0, 0)")
                 return None
             elif res['mode'] == 0:
                 return None
