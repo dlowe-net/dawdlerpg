@@ -126,12 +126,7 @@ class Ally(object):
         self.fullclass = fullclass
         self.alignment = alignment
         self.level = level
-        self.nextlvl = level
-
-    def desc(self) -> str:
-        if self.name:
-            return f"{self.name}, your level {self.level} {self.fullclass}"
-        return f"your level {self.level} {self.fullclass}"
+        self.nextlvl = nextlvl
 
 
 class Player(object):
@@ -864,8 +859,11 @@ class GameDB(object):
         for p in self._store.readall():
             self._players[p.name] = p
         self._quest = self._store.read_quest()
+        self._quest.questors = []
         if self._quest:
-            self._quest.questors = [self._players[pname] for pname in self._quest.questor_names]
+            for pname in self._quest.questor_names:
+                if pname in self._players:
+                    self._quest.questors.append(self._players[pname])
 
 
     def write_players(self, players: Optional[List[Player]]=None) -> None:
@@ -1708,8 +1706,10 @@ class DawdleBot(abstract.AbstractBot):
             self.chanmsg(f"{C('name', player.name)} has called forth a gladitorial arena.")
             self.challenge_opp(rand.choice('triggered_battle', self._db.online_players()))
         elif args == 'mount':
-            self.chanmsg(f"{C('name', player.name)} has called forth a mount.")
-            self.find_mount(rand.choice('find_mount_player',self._db.online_players()))
+            non_mount_players = [p for p in self._db.online_players() if "mount" not in p.allies]
+            target = rand.choice("find_mount_player", non_mount_players)
+            self.chanmsg(f"{C('name', player.name)} has called forth a mount for {target.name}.")
+            self.find_mount(target)
         elif args == 'quest':
             self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             if self._quest:
@@ -2026,11 +2026,11 @@ class DawdleBot(abstract.AbstractBot):
         player.allies["mount"] = Ally("", base_class, full_class, player.alignment, level, nextlvl)
 
         if player.alignment == 'g':
-            self.chanmsg(f"{player.name} befriends a {full_class}, and they quickly become inseparable companions!")
+            self.chanmsg(f"{player.name} befriends a level {level} {full_class}, and they quickly become inseparable companions!")
         elif player.alignment == 'n':
-            self.chanmsg(f"{player.name} offers food to a {full_class} and they become partners!")
+            self.chanmsg(f"{player.name} offers food to a level {level} {full_class} and they become partners!")
         elif player.alignment == 'e':
-            self.chanmsg(f"{player.name} comes upon a {full_class}, who is swiftly brought to heel!")
+            self.chanmsg(f"{player.name} comes upon a level {level} {full_class}, who is swiftly brought to heel!")
 
 
     def find_item(self, player: Player) -> None:
