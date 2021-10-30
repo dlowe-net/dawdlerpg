@@ -61,7 +61,15 @@
     {% endfor %}
     </ul>
     <p>Total item level: {{ total_items }}</p>
-    </div><div class="contentbox">
+  </div><div class="contentbox">
+    {% if player.ally_set %}
+    <h2>Allies</h2>
+    <ul>
+    {% for ally in player.ally_set.all|dictsort:"slot" %}
+    <li>{{ally.slot}}: level {{ ally.level }} {{ally.fullclass}}, Next level in {{ally.nextlvl|duration}}.</li>
+    {% endfor %}
+    </ul>
+    {% endif %}
     <h2>History</h2>
     <ul>
     {% for event in player.history_set.all|dictsortreversed:"time" %}

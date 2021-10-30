@@ -44,6 +44,8 @@ def read_config(path: str) -> Dict[str, Any]:
         # Non-idlerpg config needs defaults
         "confpath": os.path.realpath(path),
         "datadir": os.path.realpath(os.path.dirname(path)),
+        "allylvlbase": 800,
+        "allylvlstep": 1.12,
         "backupdir": ".dbbackup",
         "store_format": "idlerpg",
         "daemonize": True,

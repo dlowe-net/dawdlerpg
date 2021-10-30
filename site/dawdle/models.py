@@ -1,12 +1,12 @@
 from django.db import models
 
+class AlignmentChoices(models.TextChoices):
+    GOOD = "g"
+    NEUTRAL = "n"
+    EVIL = "e"
+
+
 class Player(models.Model):
-
-    class AlignmentChoices(models.TextChoices):
-        GOOD = "g"
-        NEUTRAL = "n"
-        EVIL = "e"
-
     name = models.CharField(primary_key=True, max_length=50)
     cclass = models.CharField(max_length=30)
     pw = models.CharField(max_length=64)
@@ -34,6 +34,21 @@ class Player(models.Model):
     penlogout = models.IntegerField(default=0)
     created = models.DateTimeField(auto_now_add=True)
     lastlogin = models.DateTimeField(auto_now_add=True)
+
+
+class Ally(models.Model):
+    owner = models.ForeignKey(Player, on_delete=models.CASCADE)
+    slot = models.CharField(max_length=10)      # mount, sidekick, henchman
+    name = models.CharField(max_length=50) # player selectable name - may be empty
+    baseclass = models.CharField(max_length=30) # lizard
+    fullclass = models.CharField(max_length=30) # sparkly lizard of the beyond
+    alignment = models.CharField(
+        max_length=1,
+        choices=AlignmentChoices.choices,
+        default=AlignmentChoices.NEUTRAL
+    )
+    level = models.IntegerField(default=0)
+    nextlvl = models.IntegerField(default=600)
 
 
 class Item(models.Model):

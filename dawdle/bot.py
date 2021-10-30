@@ -119,6 +119,21 @@ class Item(object):
         return self.level == o.level and self.name == o.name
 
 
+class Ally(object):
+    def __init__(self, name: str, baseclass: str, fullclass: str, alignment: str, level: int, nextlvl: int) -> None:
+        self.name = name
+        self.baseclass = baseclass
+        self.fullclass = fullclass
+        self.alignment = alignment
+        self.level = level
+        self.nextlvl = level
+
+    def desc(self) -> str:
+        if self.name:
+            return f"{self.name}, your level {self.level} {self.fullclass}"
+        return f"your level {self.level} {self.fullclass}"
+
+
 class Player(object):
     """Represents a player of the dawdlerpg game."""
 
@@ -146,6 +161,7 @@ class Player(object):
     lastlogin: datetime.datetime
     alignment: str
     items: Dict[str, Item]
+    allies: Dict[str, Ally]
 
     @classmethod
     def from_dict(cls: object, d: Dict[str, Any]) -> "Player":
@@ -154,6 +170,7 @@ class Player(object):
         for k,v in d.items():
             setattr(p, k, v)
         p.items = dict()
+        p.allies = dict()
         return p
 
     @staticmethod
@@ -208,7 +225,9 @@ class Player(object):
         # Character alignment - should only be n, g, or e
         p.alignment = "n"
         # Items held by player
-        p.items = {}
+        p.items = dict()
+        # Allies associated with player
+        p.allies = dict()
 
         return p
 
@@ -259,12 +278,14 @@ class Player(object):
 
         Good players get a boost, and evil players get a penalty.
         """
-        sum = self.itemsum()
+        itemsum = self.itemsum()
+        itemsum += sum([ally.level for ally in self.allies.values()])
+
         if self.alignment == 'e':
-            return int(sum * conf.get("evil_battle_pct")/100)
+            return int(itemsum * conf.get("evil_battle_pct")/100)
         if self.alignment == 'g':
-            return int(sum * conf.get("good_battle_pct")/100)
-        return sum
+            return int(itemsum * conf.get("good_battle_pct")/100)
+        return itemsum
 
 
 class Quest(object):
@@ -623,6 +644,7 @@ class Sqlite3GameStorage(GameStorage):
         with self._connect() as con:
             con.execute(f"create table dawdle_player ({','.join(Sqlite3GameStorage.FIELDS)})")
             con.execute('create table dawdle_item (id, owner_id, slot, level, name, CONSTRAINT "unique_item_owner_slot" UNIQUE ("owner_id", "slot"))')
+            con.execute('create table dawdle_ally ("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, "slot" varchar(10) NOT NULL, "name" varchar(50) NOT NULL, "baseclass" varchar(30) NOT NULL, "fullclass" varchar(30) NOT NULL, "alignment" varchar(1) NOT NULL, "level" integer NOT NULL, "nextlvl" integer NOT NULL, "owner_id" varchar(50) NOT NULL REFERENCES "dawdle_player" ("name") DEFERRABLE INITIALLY DEFERRED)')
             con.execute("create table dawdle_history (id, owner_id, time, text)")
             con.execute("create table dawdle_quest (id, mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y)")
             con.execute("insert into dawdle_quest (mode) values (0)")
@@ -633,6 +655,7 @@ class Sqlite3GameStorage(GameStorage):
         with self._connect() as con:
             con.execute("delete from dawdle_player")
             con.execute("delete from dawdle_item")
+            con.execute("delete from dawdle_ally")
             con.execute("delete from dawdle_history")
             con.execute("delete from dawdle_quest")
 
@@ -664,6 +687,9 @@ class Sqlite3GameStorage(GameStorage):
             cur = con.execute("select * from dawdle_item")
             for d in cur.fetchall():
                 players[d["owner_id"]].items[d["slot"]] = Item(d["level"], d["name"])
+            cur = con.execute("select * from dawdle_ally")
+            for d in cur.fetchall():
+                players[d["owner_id"]].allies[d["slot"]] = Ally(d["name"], d["baseclass"], d["fullclass"], d["alignment"], int(d["level"]), int(d["nextlvl"]))
         return players.values()
 
 
@@ -680,6 +706,15 @@ class Sqlite3GameStorage(GameStorage):
                     item_updates.append((p.name, slot, item.level, item.name))
             con.executemany("replace into dawdle_item (owner_id, slot, level, name) values (:owner, :slot, :level, :name)",
                             item_updates)
+            for p in players:
+                ally_updates = []
+                for slot, ally in p.allies.items():
+                    ally_updates.append((p.name, slot, ally.name, ally.baseclass, ally.fullclass, ally.alignment, ally.level, ally.nextlvl))
+                # Unlike items, allies can be removed.  Not much to do
+                # here but remove all allies and insert them back.
+                con.execute("delete from dawdle_ally where owner_id=:owner_id", (p.name,))
+                con.executemany("insert into dawdle_ally (owner_id, slot, name, baseclass, fullclass, alignment, level, nextlvl) values (:owner, :slot, :name, :baseclass, :fullclass, :alignment, :level, :nextlvl)",
+                                ally_updates)
 
 
     def close(self) -> None:
@@ -929,7 +964,7 @@ class DawdleBot(abstract.AbstractBot):
     # Commands in ALLOWPLAYERS can only be used by logged-in players
     # All other commands are admin-only
     ALLOWALL = ["help", "info", "login", "register", "quest", "version"]
-    ALLOWPLAYERS = ["align", "logout", "newpass", "removeme", "status", "whoami"]
+    ALLOWPLAYERS = ["align", "logout", "mname", "newpass", "removeme", "status", "whoami"]
     CMDHELP = {
         "help": "help [<command>] - Display help on commands.",
         "login": "login <account> <password> - Login to your account.",
@@ -961,7 +996,8 @@ class DawdleBot(abstract.AbstractBot):
         "silent": "silent <mode> - Sets silentmode to the given mode.",
         "hog": "hog - Triggers the Hand of God.",
         "push": "push <account> <seconds> - Adds seconds to the next level of account.",
-        "trigger": "trigger calamity|godsend|hog|teambattle|evilness|goodness|battle: Triggers the event."
+        "trigger": "trigger calamity|godsend|hog|teambattle|evilness|goodness|battle - Triggers the event.",
+        "mname": "mname <mount name> - Sets the name of your mount."
     }
 
 
@@ -1172,7 +1208,14 @@ class DawdleBot(abstract.AbstractBot):
             self.notice(nick, "Try: ALIGN good|neutral|evil")
             return
         player.alignment = args[0]
-        self.notice(nick, f"You have converted to {args}")
+        self.notice(nick, f"You have converted to {args}.")
+        mount = player.allies.get("mount")
+        if mount:
+            if mount.name:
+                self.notice(nick, f"{C('name', mount.name)}, your {mount.fullclass}, is disgusted with your change of heart and leaves.")
+            else:
+                self.notice(nick, f"Your {mount.fullclass} is disgusted with your change of heart and leaves.")
+            del player.allies["mount"]
         self._db.write_players([player])
 
 
@@ -1664,6 +1707,9 @@ class DawdleBot(abstract.AbstractBot):
         elif args == 'battle':
             self.chanmsg(f"{C('name', player.name)} has called forth a gladitorial arena.")
             self.challenge_opp(rand.choice('triggered_battle', self._db.online_players()))
+        elif args == 'mount':
+            self.chanmsg(f"{C('name', player.name)} has called forth a mount.")
+            self.find_mount(rand.choice('find_mount_player',self._db.online_players()))
         elif args == 'quest':
             self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             if self._quest:
@@ -1700,6 +1746,21 @@ class DawdleBot(abstract.AbstractBot):
                         f"are on a quest to {self._quest.text}. Participants must first reach "
                         f"({self._quest.dests[0][0]}, {self._quest.dests[0][1]}), then "
                         f"({self._quest.dests[1][0]}, {self._quest.dests[1][1]}).{mapnotice}")
+
+
+    def cmd_mname(self, player: Player, nick: str, args: str) -> None:
+        """Get information on current quest."""
+        assert self._irc is not None
+        if "mount" not in player.allies:
+            self.notice(nick, "You don't have a mount.")
+        elif len(args) == 0:
+            self.notice(nick, "Usage: mname <mount name>")
+        elif len(args) > 30:
+            self.notice(nick, "You must select a name less than 30 characters.")
+        else:
+            player.allies["mount"].name = args
+            self.notice(nick, f"Your {player.allies['mount'].fullclass} is now named \"{args}\".")
+            self._db.write_players([player])
 
 
     def penalize(self, player: Player, kind: str, text: Optional[str]=None) -> None:
@@ -1851,10 +1912,28 @@ class DawdleBot(abstract.AbstractBot):
                     player.nextlvl = int(conf.get("rpbase") * conf.get("rpstep") ** player.level)
 
                 self.chanmsg(f"{C('name', player.name)}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
-                self.find_item(player)
+                if player.level >= 60 and 'mount' not in player.allies and rand.randomly('ally_find', 10):
+                    self.find_mount(player)
+                else:
+                    self.find_item(player)
                 # Players below level 25 have fewer battles.
                 if player.level >= 25 or rand.randomly('lowlevel_battle', 4):
                     self.challenge_opp(player)
+            for slot, ally in player.allies.items():
+                ally.nextlvl -= passed
+                if ally.nextlvl < 1:
+                    ally.level += 1
+                    ally.nextlvl = int(conf.get("allylvlbase") * conf.get("allylvlstep") ** ally.level)
+                    if ally.name:
+                        self.notice(player.nick, f"Your {slot} {C('name', ally.name)}, the {ally.fullclass}, has attained level {ally.level}! Next level in {duration(ally.nextlvl)}.")
+                    else:
+                        self.notice(player.nick, f"Your {slot}, the {ally.fullclass}, has attained level {ally.level}! Next level in {duration(ally.nextlvl)}.")
+                    if rand.randomly('ally_evolve', 20):
+                        ally.fullclass = self.random_mount_class(ally.baseclass, ally.level, ally.alignment)
+                        if ally.name:
+                            self.notice(player.nick, "{C('name', ally.name)} has evolved into a {ally.fullclass}!")
+                        else:
+                            self.notice(player.nick, "Your {slot} has evolved into a {ally.fullclass}!")
 
         self._db.write_players(op)
 
@@ -1871,6 +1950,87 @@ class DawdleBot(abstract.AbstractBot):
             player.nextlvl -= amount
         self.chanmsg(f"{C('name', player.name)} reaches next level in {duration(player.nextlvl)}.")
         self._db.write_players([player])
+
+
+    def random_mount_class(self, base_class: str, level: int, alignment: str) -> str:
+        if level < 40:
+            prefixes = ["droopy", "tired-looking", "lame", "languid", "saggy", "slouching", "standard"]
+            suffixes = []
+        elif level < 50:
+            prefixes = ["river", "hill", "city"]
+            suffixes = ["moseying", "the road", "the market", "the trough"]
+        elif level < 60:
+            prefixes = ["alert", "strong", "keen", "savage", "tireless", "stout", "burly"]
+            suffixes = ["fortune", "swiftness", "strength", "speed", "haste"]
+        elif level < 70:
+            prefixes = ["weird", "snowy", "crimson", "rugged", "lucky", "energetic"]
+            suffixes = ["fortune", "swiftness", "strength", "speed", "haste"]
+            if alignment == 'g':
+                suffixes.extend(["sustenance", "generosity", "guarding"])
+            elif alignment == 'e':
+                suffixes.extend(["poison", "venom", "avarice", "animosity", "bile", "spite"])
+        elif level < 80:
+            prefixes = ["volcanic", "brutal", "smoldering", "glimmering", "ember", "mighty"]
+            suffixes = ["fire", "water", "earth", "air", "freedom", "enchantment"]
+            if alignment == 'g':
+                suffixes.extend(["healing", "kindness", "honor", "remedy", "light"])
+            elif alignment == 'e':
+                prefixes.extend(["dark", "hateful"])
+                suffixes.extend(["blight", "cruelty", "defiance", "butchery"])
+        elif level < 90:
+            prefixes = ["glowing", "thunder", "glorious", "rainbow", "chromatic"]
+            suffixes = ["storms", "lightning", "power", "meteors"]
+            if alignment == 'g':
+                suffixes.extend(["spirit", "joy", "bliss", "zeal", "restoration"])
+            elif alignment == 'e':
+                prefixes.extend(["loathsome"])
+                suffixes.extend(["destruction", "loathing", "carnage", "butchery"])
+        else:
+            prefixes = ["prismatic", "sparkly", "mystic", "lunar", "sacred", "divine"]
+            suffixes = ["the beyond", "infinity", "ages", "the cosmos", "destiny"]
+            if alignment == 'g':
+                suffixes.extend(["hope", "life", "truth"])
+            elif alignment == 'e':
+                suffixes.extend(["despair", "death", "malice", "pestilence"])
+            else:
+                suffixes.extend(["the great balance"])
+
+        if prefixes and not suffixes:
+            prefix = rand.choice("class_prefix", prefixes)
+            full_class = f"{prefix} {base_class}"
+        elif suffixes and not prefixes:
+            suffix = rand.choice("class_suffix", suffixes)
+            full_class = f"{base_class} of {suffix}"
+        else:
+            prefix = rand.choice("class_prefix", prefixes)
+            suffix = rand.choice("class_suffix", suffixes)
+            full_class = f"{prefix} {base_class} of {suffix}"
+        return full_class
+
+
+    def find_mount(self, player: Player) -> None:
+        """Generate a random mount and give it to the player as an Ally."""
+        # First generate level just like item level.
+        level = rand.gauss('find_mount_level',
+                           player.level,
+                           player.level / 5)
+        nextlvl = int(conf.get("allylvlbase") * conf.get("allylvlstep") ** level)
+
+        base_classes = ["bear", "eagle", "horse", "llama", "donkey", "ox", "snake", "elephant", "fox", "wolf", "squirrel", "camel"]
+        if player.alignment == 'g':
+            base_classes.extend(["pegasus", "unicorn", "hippogriff"])
+        elif player.alignment == 'e':
+            base_classes.extend(["manticore", "chimera", "warg", "shark", "spider"])
+        base_class = rand.choice("base_class", base_classes)
+        full_class = self.random_mount_class(base_class, level, player.alignment)
+        player.allies["mount"] = Ally("", base_class, full_class, player.alignment, level, nextlvl)
+
+        if player.alignment == 'g':
+            self.chanmsg(f"{player.name} befriends a {full_class}, and they quickly become inseparable companions!")
+        elif player.alignment == 'n':
+            self.chanmsg(f"{player.name} offers food to a {full_class} and they become partners!")
+        elif player.alignment == 'e':
+            self.chanmsg(f"{player.name} comes upon a {full_class}, who is swiftly brought to heel!")
 
 
     def find_item(self, player: Player) -> None:

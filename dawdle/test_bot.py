@@ -46,6 +46,10 @@ class TestGameDBSqlite3(unittest.TestCase):
 
 
 class TestGameDBIdleRPG(unittest.TestCase):
+    def setUp(self):
+        self.maxDiff = None
+
+
     def test_db(self):
         conf._conf['botnick'] = ''
         conf._conf['writequestfile'] = True
@@ -60,7 +64,6 @@ class TestGameDBIdleRPG(unittest.TestCase):
             db.write_players()
             db.load_state()
             p = db['foo']
-            self.maxDiff = None
             self.assertEqual(vars(op), vars(p))
             db.close()
 
@@ -183,6 +186,22 @@ class TestBot(unittest.TestCase):
         a.lastlogin -= datetime.timedelta(seconds=11)
         testbot.expire_splits()
         self.assertFalse(a.online)
+
+    def test_find_mount(self):
+        conf._conf['allylvlbase'] = 800
+        conf._conf['allylvlstep'] = 1.05
+        testbot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
+        testirc = FakeIRCClient()
+        testbot.connected(testirc)
+        testirc._users['foo'] = irc.IRCClient.User("foo", "foo!foo@example.com", [], 1)
+        a = testbot._db.new_player('a', 'b', 'c')
+        a.level = 40
+        a.online = True
+        a.nick = 'foo'
+        a.userhost = 'foo!foo@example.com'
+        testbot.find_mount(a)
+        self.assertIn("mount", a.allies)
+
 
 class TestGameDB(unittest.TestCase):
 
