@@ -728,7 +728,11 @@ class Sqlite3GameStorage(GameStorage):
         with self._connect() as con:
             cur = con.execute("select * from dawdle_quest")
             res = cur.fetchone()
-            if not res or res['mode'] == 0:
+            if not res:
+                # We should always have a quest object
+                con.execute("insert into dawdle_quest (mode, p1, p2, p3, p4) values (0, '', '', '', '')")
+                return None
+            elif res['mode'] == 0:
                 return None
             q = Quest()
             q.questor_names = [res['p1'], res['p2'], res['p3'], res['p4']]
