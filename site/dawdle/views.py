@@ -22,7 +22,7 @@ class AboutView(generic.TemplateView):
 class MapView(View):
 
     def _colorplayer(self, player, questors):
-        if questors and player.name in questors:
+        if player.name in questors:
             return (0x00, 0xff, 0xe9), (0x80, 0xbb, 0xff)
         if player.online:
             return (0x00, 0x1e, 0xe9), (0x80, 0xbb, 0xff)
@@ -34,16 +34,16 @@ class MapView(View):
         full_map = base_map.copy()
         draw = ImageDraw.Draw(full_map)
 
-        q = Quest.objects.all()
-        questors = None
-        if q and q[0].mode != 0:
-            q = q[0]
+        questors = []
+        q = Quest.objects.get()
+        if q and q.mode != 0:
             questors = [q.p1, q.p2, q.p3, q.p4]
+
         if 'player' in kwargs:
             pquery = Player.objects.filter(name=kwargs['player'])
             dotsize = 5
-        elif 'quest' in kwargs and q:
-            pquery = Player.objects.filter(name__in=['rethion'])
+        elif 'quest' in kwargs and questors:
+            pquery = Player.objects.filter(name__in=questors)
         else:
             pquery = Player.objects
             dotsize = 3
