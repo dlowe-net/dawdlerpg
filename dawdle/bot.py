@@ -859,8 +859,8 @@ class GameDB(object):
         for p in self._store.readall():
             self._players[p.name] = p
         self._quest = self._store.read_quest()
-        self._quest.questors = []
         if self._quest:
+            self._quest.questors = []
             for pname in self._quest.questor_names:
                 if pname in self._players:
                     self._quest.questors.append(self._players[pname])
