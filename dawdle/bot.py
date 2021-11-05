@@ -129,7 +129,7 @@ class Ally(object):
     nextlvl: int
 
     @staticmethod
-    def time_to_next_level(level: int):
+    def time_to_next_level(level: int) -> int:
         """Returns seconds required to advance levels."""
         base, step, maxexplvl = conf.get("allylvlbase"), conf.get("allylvlstep"), conf.get("allymaxexplvl")
         # time is exponential until maxexplvl, then logarithmic
@@ -177,7 +177,7 @@ class Player(object):
     allies: Dict[str, Ally]
 
     @staticmethod
-    def time_to_next_level(level: int):
+    def time_to_next_level(level: int) -> int:
         """Returns seconds required to advance levels."""
         base, step, maxexplvl = conf.get("rpbase"), conf.get("rpstep"), conf.get("rpmaxexplvl")
         # time is exponential until maxexplvl, then logarithmic
@@ -787,17 +787,19 @@ class Sqlite3GameStorage(GameStorage):
             cur = con.execute("select * from dawdle_quest")
             res = cur.fetchone()
             if not res:
+                log.debug("No quest object found. Inserting blank quest object.")
                 # We should always have a quest object
                 con.execute("insert into dawdle_quest (mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y) values (0, '', '', '', '', '', 0, 0, 0, 0, 0, 0)")
                 return None
             elif res['mode'] == 0:
+                log.debug("No quest loaded (mode == 0)")
                 return None
             q = Quest()
             q.questor_names = [res['p1'], res['p2'], res['p3'], res['p4']]
             q.text = res['text']
-            q.mode = res['mode']
+            q.mode = int(res['mode'])
             if q.mode == 1:
-                q.qtime = res['qtime']
+                q.qtime = int(res['qtime'])
             if q.mode == 2:
                 q.stage = int(res['stage'])
                 q.dests = [(int(res['dest1x']), int(res['dest1y'])), (int(res['dest2x']), int(res['dest2y']))]
@@ -888,10 +890,13 @@ class GameDB(object):
             self._players[p.name] = p
         self._quest = self._store.read_quest()
         if self._quest:
+            log.info("Loaded quest mode %s", self._quest.mode)
             self._quest.questors = []
             for pname in self._quest.questor_names:
                 if pname in self._players:
                     self._quest.questors.append(self._players[pname])
+        else:
+            log.info("No quest loaded.")
 
 
     def write_players(self, players: Optional[List[Player]]=None) -> None:
@@ -1045,7 +1050,6 @@ class DawdleBot(abstract.AbstractBot):
         self._irc = None             # irc connection
         self._db = db           # the player database
         self._state = 'disconnected' # connected, disconnected, or ready
-        self._quest = None           # quest if any
         self._qtimer = 0             # time until next quest
         self._silence = set() # can have 'chanmsg' or 'notice' to silence them
         self._pause = False # prevents game events from happening when True
@@ -1743,7 +1747,7 @@ class DawdleBot(abstract.AbstractBot):
             self.find_mount(target)
         elif args == 'quest':
             self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
-            if self._quest:
+            if self._db._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
             qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level")]
@@ -1757,26 +1761,26 @@ class DawdleBot(abstract.AbstractBot):
     def cmd_quest(self, player: Player, nick: str, args: str) -> None:
         """Get information on current quest."""
         assert self._irc is not None
-        if self._quest is None:
+        if self._db._quest is None:
             self.notice(nick, "There is no active quest.")
-        elif self._quest.mode == 1:
-            assert self._quest.qtime is not None
-            qp = self._quest.questors
+        elif self._db._quest.mode == 1:
+            assert self._db._quest.qtime is not None
+            qp = self._db._quest.questors
             self.notice(nick,
                         f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
-                        f"are on a quest to {self._quest.text}. Quest to complete in "
-                        f"{duration(int(self._quest.qtime - time.time()))}.")
-        elif self._quest.mode == 2:
-            assert self._quest.dests is not None
-            qp = self._quest.questors
+                        f"are on a quest to {self._db._quest.text}. Quest to complete in "
+                        f"{duration(int(self._db._quest.qtime - time.time()))}.")
+        elif self._db._quest.mode == 2:
+            assert self._db._quest.dests is not None
+            qp = self._db._quest.questors
             mapnotice = ''
             if conf.has("mapurl"):
                 mapnotice = f" See {conf.get('mapurl')} to monitor their journey's progress."
             self.notice(nick,
                         f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
-                        f"are on a quest to {self._quest.text}. Participants must first reach "
-                        f"({self._quest.dests[0][0]}, {self._quest.dests[0][1]}), then "
-                        f"({self._quest.dests[1][0]}, {self._quest.dests[1][1]}).{mapnotice}")
+                        f"are on a quest to {self._db._quest.text}. Participants must first reach "
+                        f"({self._db._quest.dests[0][0]}, {self._db._quest.dests[0][1]}), then "
+                        f"({self._db._quest.dests[1][0]}, {self._db._quest.dests[1][1]}).{mapnotice}")
 
 
     def cmd_mname(self, player: Player, nick: str, args: str) -> None:
@@ -1810,7 +1814,8 @@ class DawdleBot(abstract.AbstractBot):
         if penalty == 0:
             return
 
-        if self._quest and player in self._quest.questors:
+        if self._db._quest and player in self._db._quest.questors:
+            log.info("Quest failed due to %s penalty by %s", kind, player.name)
             op = self._db.online_players()
             self.logchanmsg(op,
                             f"{C('name')}{player.name}'s{C()} insolence has brought the wrath of "
@@ -1823,7 +1828,7 @@ class DawdleBot(abstract.AbstractBot):
                 p.penquest += gain
                 p.nextlvl += gain
 
-            self._quest = None
+            self._db._quest = None
             self._qtimer = time.time() + conf.get("quest_interval_min")
 
         if text:
@@ -1922,8 +1927,8 @@ class DawdleBot(abstract.AbstractBot):
         self.move_players()
         self.quest_check(now)
 
-        if now % 120 == 0 and self._quest:
-            self._db.update_quest(self._quest)
+        if now % 120 == 0 and self._db._quest:
+            self._db.update_quest(self._db._quest)
         if now % 36000 == 0:
             top = self._db.top_players()
             if top:
@@ -2356,12 +2361,12 @@ class DawdleBot(abstract.AbstractBot):
         mapx = conf.get("mapx")
         mapy = conf.get("mapy")
         combatants: Dict[Tuple[int,int], Player] = dict()
-        if self._quest and self._quest.mode == 2:
-            assert self._quest.stage is not None
-            assert self._quest.dests is not None
-            destx = self._quest.dests[self._quest.stage-1][0]
-            desty = self._quest.dests[self._quest.stage-1][1]
-            for p in self._quest.questors:
+        if self._db._quest and self._db._quest.mode == 2:
+            assert self._db._quest.stage is not None
+            assert self._db._quest.dests is not None
+            destx = self._db._quest.dests[self._db._quest.stage-1][0]
+            desty = self._db._quest.dests[self._db._quest.stage-1][1]
+            for p in self._db._quest.questors:
                 if not rand.randomly("quest_movement", 10):
                     # Move at 10% speed when questing.
                     op.remove(p)
@@ -2417,63 +2422,67 @@ class DawdleBot(abstract.AbstractBot):
                  re.match(r'(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
         if not match:
             return
-        self._quest = Quest()
-        self._quest.questors = qp
+        self._db._quest = Quest()
+        self._db._quest.questors = qp
         if match[1] == '1':
             quest_time = rand.randint('quest_time', 6, 12)*3600
-            self._quest.mode = 1
-            self._quest.text = match[2]
-            self._quest.qtime = int(time.time()) + quest_time
+            self._db._quest.mode = 1
+            self._db._quest.text = match[2]
+            self._db._quest.qtime = int(time.time()) + quest_time
             self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
-                         f"been chosen by the gods to {self._quest.text}.  Quest to end in "
+                         f"been chosen by the gods to {self._db._quest.text}.  Quest to end in "
                          f"{duration(quest_time)}.")
+            log.info("Starting mode 1 quest with duration %s", duration(quest_time))
         elif match[1] == '2':
-            self._quest.mode = 2
-            self._quest.stage = 1
-            self._quest.dests = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
-            self._quest.text = match[6]
+            self._db._quest.mode = 2
+            self._db._quest.stage = 1
+            self._db._quest.dests = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
+            self._db._quest.text = match[6]
             mapnotice = ''
             if conf.has("mapurl"):
                 mapnotice = f" See {conf.get('mapurl')} to monitor their journey's progress."
             self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
-                         f"been chosen by the gods to {self._quest.text}.  Participants must first "
-                         f"reach ({self._quest.dests[0][0]},{self._quest.dests[0][1]}), "
-                         f"then ({self._quest.dests[1][0]},{self._quest.dests[1][1]}).{mapnotice}")
-        self._db.update_quest(self._quest)
+                         f"been chosen by the gods to {self._db._quest.text}.  Participants must first "
+                         f"reach ({self._db._quest.dests[0][0]},{self._db._quest.dests[0][1]}), "
+                         f"then ({self._db._quest.dests[1][0]},{self._db._quest.dests[1][1]}).{mapnotice}")
+            log.info("Starting mode 2 quest")
+        self._db.update_quest(self._db._quest)
 
 
     def quest_check(self, now: int) -> None:
         """Complete quest if criteria are met."""
-        if self._quest is None:
+        if self._db._quest is None:
             if now >= self._qtimer:
                 self.quest_start(now)
-        elif self._quest.mode == 1:
-            assert self._quest.qtime is not None
-            if now >= self._quest.qtime:
-                qp = self._quest.questors
+        elif self._db._quest.mode == 1:
+            assert self._db._quest.qtime is not None
+            if now >= self._db._quest.qtime:
+                qp = self._db._quest.questors
                 self.logchanmsg(qp,
                                 f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                                 f"have blessed the realm by completing their quest! 25% of "
                                 f"their burden is eliminated.")
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
-                self._quest = None
+                self._db._quest = None
                 self._qtimer = now + conf.get("quest_interval_min")
-                self._db.update_quest(self._quest)
-        elif self._quest.mode == 2:
-            assert self._quest.stage is not None
-            assert self._quest.dests is not None
-            destx = self._quest.dests[self._quest.stage-1][0]
-            desty = self._quest.dests[self._quest.stage-1][1]
+                self._db.update_quest(self._db._quest)
+                log.info("Quest completed (mode 1)")
+
+        elif self._db._quest.mode == 2:
+            assert self._db._quest.stage is not None
+            assert self._db._quest.dests is not None
+            destx = self._db._quest.dests[self._db._quest.stage-1][0]
+            desty = self._db._quest.dests[self._db._quest.stage-1][1]
             done = True
-            for q in self._quest.questors:
+            for q in self._db._quest.questors:
                 if q.posx != destx or q.posy != desty:
                     done = False
                     break
             if done:
-                self._quest.stage += 1
-                qp = self._quest.questors
-                dests_left = len(self._quest.dests) - self._quest.stage + 1
+                self._db._quest.stage += 1
+                qp = self._db._quest.questors
+                dests_left = len(self._db._quest.dests) - self._db._quest.stage + 1
                 if dests_left > 0:
                     self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} "
                                  f"have reached a landmark on their journey! {dests_left} "
@@ -2485,6 +2494,7 @@ class DawdleBot(abstract.AbstractBot):
                                     f"their burden is eliminated.")
                     for q in qp:
                         q.nextlvl = int(q.nextlvl * 0.75)
-                    self._quest = None
+                    self._db._quest = None
                     self._qtimer = now + conf.get("quest_interval_min")
-                self._db.update_quest(self._quest)
+                    log.info("Quest completed (mode 2)")
+                self._db.update_quest(self._db._quest)
