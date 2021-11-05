@@ -1794,6 +1794,16 @@ class DawdleBot(abstract.AbstractBot):
             self._db.write_players([player])
 
 
+    def cmd_recalcallies(self, player: Player, nick: str, args: str) -> None:
+        """Recompute TTL for all allies."""
+        assert self._irc is not None
+        for p in self._db._players.values():
+            for a in p.allies.values():
+                a.nextlvl = Ally.time_to_next_level(a.level)
+        self._db.write_players()
+        self.notice(nick, "TTL for all allies recomputed.")
+
+
     def penalize(self, player: Player, kind: str, text: Optional[str]=None) -> None:
         """Exact penalities on a transgressing player."""
         penalty = conf.get("pen"+kind)
