@@ -16,6 +16,8 @@ from dawdle import log
 class TestGameDBSqlite3(unittest.TestCase):
     def test_db(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         with tempfile.TemporaryDirectory() as tmpdir:
             db = bot.GameDB(bot.Sqlite3GameStorage(os.path.join(tmpdir, 'dawdle_test.db')))
             self.assertFalse(db.exists())
@@ -188,8 +190,9 @@ class TestBot(unittest.TestCase):
         self.assertFalse(a.online)
 
     def test_find_mount(self):
-        conf._conf['allylvlbase'] = 800
-        conf._conf['allylvlstep'] = 1.05
+        conf._conf['allylvlbase'] = 200
+        conf._conf['allylvlstep'] = 1.16
+        conf._conf['allymaxexplvl'] = 60
         testbot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
         testirc = FakeIRCClient()
         testbot.connected(testirc)
@@ -221,6 +224,8 @@ class TestPvPBattle(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['modsfile'] = '/tmp/modsfile.txt'
         conf._conf['color'] = False
         self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
@@ -370,6 +375,8 @@ class TestTeamBattle(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['modsfile'] = '/tmp/modsfile.txt'
         conf._conf['color'] = False
         self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
@@ -433,6 +440,8 @@ class TestEvilness(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['modsfile'] = '/tmp/modsfile.txt'
         conf._conf['color'] = False
         self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
@@ -469,6 +478,8 @@ class TestGoodness(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['modsfile'] = '/tmp/modsfile.txt'
         conf._conf['color'] = False
         self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
@@ -499,6 +510,8 @@ class TestHandOfGod(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['color'] = False
         self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
         self.irc = FakeIRCClient()
@@ -532,6 +545,8 @@ class TestQuest(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['datadir'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "setup")
         conf._conf['eventsfile'] = "events.txt"
         conf._conf['writequestfile'] = True
@@ -653,6 +668,8 @@ class TestAdminCommands(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['color'] = False
         self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
         self.irc = FakeIRCClient()
@@ -680,6 +697,8 @@ class TestPlayerCommands(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['color'] = False
         conf._conf['allowuserinfo'] = True
         conf._conf['helpurl'] = "http://example.com/"
@@ -719,7 +738,8 @@ class TestGameTick(unittest.TestCase):
 
     def setUp(self):
         conf._conf['rpbase'] = 600
-        conf._conf['rpstep'] = 1.14
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
         conf._conf['detectsplits'] = True
         conf._conf['splitwait'] = 300
         conf._conf['datadir'] = os.path.join(os.path.dirname(os.path.dirname(__file__)), "setup")

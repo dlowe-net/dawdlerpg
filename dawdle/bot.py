@@ -17,6 +17,7 @@ import collections
 import crypt
 import datetime
 import itertools
+import math
 import os
 import os.path
 import random
@@ -120,6 +121,23 @@ class Item(object):
 
 
 class Ally(object):
+    name: str
+    baseclass: str
+    fullclass: str
+    alignment: str
+    level: int
+    nextlvl: int
+
+    @staticmethod
+    def time_to_next_level(level: int):
+        """Returns seconds required to advance levels."""
+        base, step, maxexplvl = conf.get("allylvlbase"), conf.get("allylvlstep"), conf.get("allymaxexplvl")
+        # time is exponential until maxexplvl, then logarithmic
+        if level > maxexplvl:
+            return int(base * step ** maxexplvl + (86400 * math.log(level - maxexplvl + 1, step)))
+        return int(base * step ** level)
+
+
     def __init__(self, name: str, baseclass: str, fullclass: str, alignment: str, level: int, nextlvl: int) -> None:
         self.name = name
         self.baseclass = baseclass
@@ -158,6 +176,16 @@ class Player(object):
     items: Dict[str, Item]
     allies: Dict[str, Ally]
 
+    @staticmethod
+    def time_to_next_level(level: int):
+        """Returns seconds required to advance levels."""
+        base, step, maxexplvl = conf.get("rpbase"), conf.get("rpstep"), conf.get("rpmaxexplvl")
+        # time is exponential until maxexplvl, then logarithmic
+        if level > maxexplvl:
+            return int(base * step ** maxexplvl + (86400 * math.log(level - maxexplvl + 1, step)))
+        return int(base * step ** level)
+
+
     @classmethod
     def from_dict(cls: object, d: Dict[str, Any]) -> "Player":
         """Returns a player with its values set to the dict's."""
@@ -169,7 +197,7 @@ class Player(object):
         return p
 
     @staticmethod
-    def new_player(pname: str, pclass: str, ppass: str, nextlvl: int) -> "Player":
+    def new_player(pname: str, pclass: str, ppass: str) -> "Player":
         """Initialize a new player."""
         now = datetime.datetime.now().replace(microsecond=0)
         p = Player()
@@ -184,7 +212,7 @@ class Player(object):
         # level
         p.level = 0
         # time in seconds to next level
-        p.nextlvl = nextlvl
+        p.nextlvl = Player.time_to_next_level(0)
         # whether or not the account is online
         p.online = False
         # IRC nick if online
@@ -879,7 +907,7 @@ class GameDB(object):
         if pname in self._players:
             raise KeyError
 
-        p = Player.new_player(pname, pclass, ppass, conf.get("rpbase"))
+        p = Player.new_player(pname, pclass, ppass)
         self._players[pname] = p
         self._store.new(p)
 
@@ -1908,11 +1936,7 @@ class DawdleBot(abstract.AbstractBot):
             player.idled += passed
             if player.nextlvl < 1:
                 player.level += 1
-                if player.level > 60:
-                    # linear after level 60
-                    player.nextlvl = int(conf.get("rpbase") * conf.get("rpstep") ** 60) + (86400 * (player.level - 60))
-                else:
-                    player.nextlvl = int(conf.get("rpbase") * conf.get("rpstep") ** player.level)
+                player.nextlvl = Player.time_to_next_level(player.level)
 
                 self.chanmsg(f"{C('name', player.name)}, the {player.cclass}, has attained level {player.level}! Next level in {duration(player.nextlvl)}.")
                 if player.level >= 60 and 'mount' not in player.allies and rand.randomly('ally_find', 10):
@@ -1926,7 +1950,7 @@ class DawdleBot(abstract.AbstractBot):
                 ally.nextlvl -= passed
                 if ally.nextlvl < 1:
                     ally.level += 1
-                    ally.nextlvl = int(conf.get("allylvlbase") * conf.get("allylvlstep") ** ally.level)
+                    ally.nextlvl = Ally.time_to_next_level(ally.level)
                     if ally.name:
                         self.notice(player.nick, f"Your {slot} {C('name', ally.name)}, the {ally.fullclass}, has attained level {ally.level}! Next level in {duration(ally.nextlvl)}.")
                     else:
@@ -2017,7 +2041,7 @@ class DawdleBot(abstract.AbstractBot):
         level = rand.gauss('find_mount_level',
                            player.level,
                            player.level / 5)
-        nextlvl = int(conf.get("allylvlbase") * conf.get("allylvlstep") ** level)
+        nextlvl = Ally.time_to_next_level(level)
 
         base_classes = ["bear", "eagle", "horse", "llama", "donkey", "ox", "snake", "elephant", "fox", "wolf", "squirrel", "camel"]
         if player.alignment == 'g':
