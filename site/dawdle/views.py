@@ -1,5 +1,6 @@
 import io
 import os
+import time
 
 from django.db.models import Sum
 from django.http import HttpResponse
@@ -92,6 +93,7 @@ class QuestView(generic.TemplateView):
             questors = Player.objects.filter(name__in=[quest.p1,quest.p2,quest.p3,quest.p4]).all()
             context['quest'] = quest
             context['questors'] = questors
+            context['qtime_remaining'] = quest.qtime - time.time()
         except Quest.DoesNotExist:
             context['quest'] = None
         return context

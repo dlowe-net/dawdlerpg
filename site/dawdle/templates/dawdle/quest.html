@@ -9,7 +9,7 @@
   <h1>The sacred quest to {{quest.text}}</h1>
 
   {% if quest.mode == 1 %}
-  <p>Time left in quest: {{quest.qtime|duration}}</p>
+  <p>Time left in quest: {{qtime_remaining|duration}}</p>
   {% elif quest.stage == 1 %}
   <p>Questor's next destination: ({{quest.dest1x}}, {{quest.dest1y}})</p>
   {% else %}
