@@ -10,7 +10,6 @@ from dawdle import bot
 from dawdle import conf
 from dawdle import irc
 from dawdle import rand
-from dawdle import log
 
 
 class TestGameDBSqlite3(unittest.TestCase):
@@ -677,7 +676,6 @@ class TestAdminCommands(unittest.TestCase):
 
     def test_delold(self):
         op = [self.bot._db.new_player(pname, 'a', 'b') for pname in "abcd"]
-        level = 25
         expired = time.time() - 9 * 86400
         for p in op[:2]:
             p.lastlogin = datetime.datetime.fromtimestamp(expired)

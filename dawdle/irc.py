@@ -10,7 +10,7 @@ from dawdle import abstract
 from dawdle import chunk
 from dawdle import conf
 from dawdle.log import log
-from typing import Awaitable, Dict, Iterable, List, Optional, Set, Sequence, TypeVar
+from typing import Dict, Iterable, List, Optional, Set, TypeVar
 
 
 T = TypeVar("T")
@@ -30,6 +30,41 @@ class IRCClient(abstract.AbstractClient):
     MESSAGE_RE = re.compile(r'^(?:@(\S*) )?(?::([^ !]*)(?:!([^ @]*)(?:@([^ ]*))?)?\s+)?(\S+)\s*((?:[^:]\S*(?:\s+|$))*)(?::(.*))?')
 
     Message = collections.namedtuple('Message', ['tags', 'src', 'user', 'host', 'cmd', 'args', 'trailing', 'line', 'time'])
+
+
+    @staticmethod
+    def parse_message(line: str) -> Optional[Message]:
+        """Parse IRC line into a Message."""
+        # Parse IRC message with a regular expression
+        match = IRCClient.MESSAGE_RE.match(line)
+        if not match:
+            return None
+        rawtags, src, user, host, cmd, argstr, trailing = match.groups()
+        # IRCv3 supports tags
+        tags: Dict[str, Optional[str]] = {}
+        if rawtags is not None and rawtags != "":
+            for pairstr in rawtags.split(';'):
+                pair = pairstr.split('=')
+                if len(pair) == 2:
+                    tags[pair[0]] = re.sub(r"\\(.)",
+                                           lambda m: {":": ";", "s": " ", "r": "\r", "n": "\n"}.get(m[1], m[1]),
+                                           pair[1])
+                else:
+                    tags[pair[0]] = None
+        # Arguments before the trailing argument (after the colon) are space-delimited
+        args = [] if argstr == "" else argstr.rstrip().split(' ')
+        # There's nothing special about the trailing argument except it can have spaces.
+        if trailing is not None:
+            args.append(trailing)
+        # Numeric responses specify a useless target afterwards
+        if re.match(r'\d+', cmd):
+            args = args[1:]
+        # Support time tag, which allows servers and bouncers to send history
+        if 'time' in tags and tags["time"] is not None:
+            msgtime = time.mktime(time.strptime(tags['time'], "%Y-%m-%dT%H:%M:%S"))
+        else:
+            msgtime = time.time()
+        return IRCClient.Message(tags, src, user, host, cmd, args, trailing, line, msgtime)
 
 
     class User(abstract.AbstractClient.User):
@@ -115,7 +150,7 @@ class IRCClient(abstract.AbstractClient):
             line = line.rstrip('\r\n')
             loglevel = 5 if re.match(r"^PING ", line) else logging.DEBUG
             log.log(loglevel, "<- %s", line)
-            msg = self.parse_message(line)
+            msg = IRCClient.parse_message(line)
             if msg:
                 self.dispatch(msg)
 
@@ -201,43 +236,6 @@ class IRCClient(abstract.AbstractClient):
 
     def clear_writeq(self) -> None:
         self._writeq.clear()
-
-
-    def parse_message(self, line: str) -> Optional[Message]:
-        """Parse IRC line into a Message."""
-        # Parse IRC message with a regular expression
-        match = IRCClient.MESSAGE_RE.match(line)
-        if not match:
-            return None
-        rawtags, src, user, host, cmd, argstr, trailing = match.groups()
-        # IRCv3 supports tags
-        tags: Dict[str, Optional[str]] = dict()
-        if rawtags is not None and rawtags != "":
-            for pairstr in rawtags.split(';'):
-                pair = pairstr.split('=')
-                if len(pair) == 2:
-                    tags[pair[0]] = re.sub(r"\\(.)",
-                                           lambda m: {":": ";", "s": " ", "r": "\r", "n": "\n"}.get(m[1], m[1]),
-                                           pair[1])
-                else:
-                    tags[pair[0]] = None
-        # Arguments before the trailing argument (after the colon) are space-delimited
-        if argstr == "":
-            args = []
-        else:
-            args = argstr.rstrip().split(' ')
-        # There's nothing special about the trailing argument except it can have spaces.
-        if trailing is not None:
-            args.append(trailing)
-        # Numeric responses specify a useless target afterwards
-        if re.match(r'\d+', cmd):
-            args = args[1:]
-        # Support time tag, which allows servers and bouncers to send history
-        if 'time' in tags and tags["time"] is not None:
-            msgtime = time.mktime(time.strptime(tags['time'], "%Y-%m-%dT%H:%M:%S"))
-        else:
-            msgtime = time.time()
-        return IRCClient.Message(tags, src, user, host, cmd, args, trailing, line, msgtime)
 
 
     def dispatch(self, msg: Message) -> None:
@@ -486,16 +484,16 @@ class IRCClient(abstract.AbstractClient):
 
     def match_user(self, nick: str, userhost: str) -> bool:
         """Return True if the nick and userhost match an existing user."""
-        return (nick in self._users and userhost == self._users[nick].userhost)
+        return nick in self._users and userhost == self._users[nick].userhost
 
 
     def is_bot_nick(self, nick: str) -> bool:
-         return nick == self._nick or nick == conf.get("botnick")
+        return nick == self._nick or nick == conf.get("botnick")
 
 
     def bot_has_ops(self) -> bool:
         """Return True if the bot has ops in the channel."""
-        return (self._nick in self._users and 'o' in self._users[self._nick].modes)
+        return self._nick in self._users and 'o' in self._users[self._nick].modes
 
 
     def nick_userhost(self, nick: str) -> Optional[str]:

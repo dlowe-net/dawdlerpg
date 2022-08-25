@@ -1,5 +1,5 @@
 import random
-from typing import cast, Any, Collection, Dict, List, MutableSequence, Sequence, TypeVar
+from typing import cast, Any, Dict, List, MutableSequence, Sequence, TypeVar
 
 T = TypeVar("T")
 

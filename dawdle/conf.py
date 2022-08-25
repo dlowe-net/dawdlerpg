@@ -5,7 +5,7 @@ import re
 import sys
 
 from dawdle.log import log
-from typing import cast, Any, Dict, List, Union, Tuple
+from typing import cast, Any, Dict, List, Union
 
 DURATION_RE = re.compile(r"(\d+)([dhms])")
 NUMERIC_RE = re.compile(r"[+-]?\d+(?:(\.)\d*)?")
@@ -101,7 +101,7 @@ def read_config(path: str) -> Dict[str, Any]:
                 else:
                     newconf[key] = parse_val(val)
     except OSError as err:
-        log.critical(f"Unable to read {path}")
+        log.critical(f"Unable to read {path}: {err}")
         sys.exit(1)
     return newconf
 

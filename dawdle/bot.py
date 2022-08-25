@@ -20,7 +20,6 @@ import itertools
 import math
 import os
 import os.path
-import random
 import re
 import shutil
 import sqlite3
@@ -34,7 +33,7 @@ from dawdle import chunk
 from dawdle import conf
 from dawdle import rand
 from dawdle.log import log
-from typing import cast, Any, Dict, List, Literal, Iterable, Optional, Sized, Set, Sequence, Tuple
+from typing import cast, Any, Dict, List, Literal, Iterable, Optional, Set, Tuple
 
 
 VERSION = "1.0.0"
@@ -791,7 +790,7 @@ class Sqlite3GameStorage(GameStorage):
                 # We should always have a quest object
                 con.execute("insert into dawdle_quest (mode, p1, p2, p3, p4, text, qtime, stage, dest1x, dest1y, dest2x, dest2y) values (0, '', '', '', '', '', 0, 0, 0, 0, 0, 0)")
                 return None
-            elif res['mode'] == 0:
+            if res['mode'] == 0:
                 log.debug("No quest loaded (mode == 0)")
                 return None
             q = Quest()
@@ -1357,10 +1356,10 @@ class DawdleBot(abstract.AbstractBot):
             return
         pname, ppass = parts
         if pname not in self._db:
-            self.notice(nick, f"Sorry, no such account name.  Note that account names are case sensitive.")
+            self.notice(nick, "Sorry, no such account name.  Note that account names are case sensitive.")
             return
         if not self._db.check_login(pname, ppass):
-            self.notice(nick, f"Wrong password.")
+            self.notice(nick, "Wrong password.")
             return
         # Success!
         if conf.get("voiceonlogin") and self._irc.bot_has_ops():
@@ -1477,7 +1476,7 @@ class DawdleBot(abstract.AbstractBot):
         player.lastlogin = datetime.datetime.now()
         self._db.write_players([player])
         if conf.get("voiceonlogin") and self._irc.bot_has_ops():
-                self._irc.revoke_voice(nick)
+            self._irc.revoke_voice(nick)
         self.penalize(player, "logout")
 
 
@@ -1579,7 +1578,7 @@ class DawdleBot(abstract.AbstractBot):
         elif not self._db[args].isadmin:
             self.notice(nick, f"{args} is already not an admin.")
         elif args == conf.get("owner"):
-            self.notice(nick, f"You can't do that.")
+            self.notice(nick, "You can't do that.")
         else:
             self._db[args].isadmin = False
             self._db.write_players([player])

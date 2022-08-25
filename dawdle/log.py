@@ -11,6 +11,7 @@ log.setLevel(0)
 
 
 def add_handler(loglevel:Union[str, int] , logfile: str, template: str) -> None:
+    h: Union[logging.StreamHandler, logging.FileHandler]
     if logfile == "/dev/stdout":
         h = logging.StreamHandler(sys.stdout)
     elif logfile == "/dev/stderr":
