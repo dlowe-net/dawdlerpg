@@ -764,6 +764,8 @@ class Sqlite3GameStorage(GameStorage):
     def delete_player(self, pname: str) -> None:
         """Remove player from db."""
         with self._connect() as con:
+            con.execute("delete from dawdle_history where owner_id = ?", (pname,))
+            con.execute("delete from dawdle_item where owner_id = ?", (pname,))
             con.execute("delete from dawdle_player where name = ?", (pname,))
             con.commit()
 
