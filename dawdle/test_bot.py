@@ -580,7 +580,7 @@ class TestQuest(unittest.TestCase):
         self.bot.quest_start(now)
         self.bot.private_message(users[0], 'quest')
         # time passes
-        self.bot._quest.qtime = now-1
+        self.bot._db._quest.qtime = now-1
         self.bot.quest_check(now)
 
         self.assertListEqual(self.irc.chanmsgs, [

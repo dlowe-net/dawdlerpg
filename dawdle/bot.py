@@ -839,14 +839,16 @@ class Sqlite3GameStorage(GameStorage):
 
 
 class GameDB(object):
-    """Class to manage a collection of Players."""
+    """Class to manage the in-memory game state."""
 
     _store: GameStorage
     _players: Dict[str, Player]
+    _quest: Optional[Quest]
 
     def __init__(self, store: GameStorage):
         self._store = store
         self._players = {}
+        self._quest = None
 
     def __getitem__(self, pname: str) -> Player:
         """Return a player by name."""
@@ -948,6 +950,7 @@ class GameDB(object):
 
 
     def update_quest(self, quest: Optional[Quest]) -> None:
+        self._quest = quest
         self._store.update_quest(quest)
 
 
@@ -1034,7 +1037,6 @@ class DawdleBot(abstract.AbstractBot):
     _irc: Optional[abstract.AbstractClient]
     _db: GameDB
     _state: Literal["disconnected", "connected", "ready"]
-    _quest: Optional[Quest]
     _qtimer: int
     _silence: Set[str]
     _pause: bool
@@ -1827,7 +1829,7 @@ class DawdleBot(abstract.AbstractBot):
                 p.penquest += gain
                 p.nextlvl += gain
 
-            self._db._quest = None
+            self._db.update_quest(None)
             self._qtimer = time.time() + conf.get("quest_interval_min")
 
         if text:
@@ -2421,31 +2423,31 @@ class DawdleBot(abstract.AbstractBot):
                  re.match(r'(2) (\d+) (\d+) (\d+) (\d+) (.*)', questconf))
         if not match:
             return
-        self._db._quest = Quest()
-        self._db._quest.questors = qp
+        new_quest = Quest()
+        new_quest.questors = qp
         if match[1] == '1':
             quest_time = rand.randint('quest_time', 6, 12)*3600
-            self._db._quest.mode = 1
-            self._db._quest.text = match[2]
-            self._db._quest.qtime = int(time.time()) + quest_time
+            new_quest.mode = 1
+            new_quest.text = match[2]
+            new_quest.qtime = int(time.time()) + quest_time
             self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
-                         f"been chosen by the gods to {self._db._quest.text}.  Quest to end in "
+                         f"been chosen by the gods to {new_quest.text}.  Quest to end in "
                          f"{duration(quest_time)}.")
             log.info("Starting mode 1 quest with duration %s", duration(quest_time))
         elif match[1] == '2':
-            self._db._quest.mode = 2
-            self._db._quest.stage = 1
-            self._db._quest.dests = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
-            self._db._quest.text = match[6]
+            new_quest.mode = 2
+            new_quest.stage = 1
+            new_quest.dests = [(int(match[2]), int(match[3])), (int(match[4]), int(match[5]))]
+            new_quest.text = match[6]
             mapnotice = ''
             if conf.has("mapurl"):
                 mapnotice = f" See {conf.get('mapurl')} to monitor their journey's progress."
             self.chanmsg(f"{C('name', qp[0].name)}, {C('name', qp[1].name)}, {C('name', qp[2].name)}, and {C('name', qp[3].name)} have "
-                         f"been chosen by the gods to {self._db._quest.text}.  Participants must first "
-                         f"reach ({self._db._quest.dests[0][0]},{self._db._quest.dests[0][1]}), "
-                         f"then ({self._db._quest.dests[1][0]},{self._db._quest.dests[1][1]}).{mapnotice}")
+                         f"been chosen by the gods to {new_quest.text}.  Participants must first "
+                         f"reach ({new_quest.dests[0][0]},{new_quest.dests[0][1]}), "
+                         f"then ({new_quest.dests[1][0]},{new_quest.dests[1][1]}).{mapnotice}")
             log.info("Starting mode 2 quest")
-        self._db.update_quest(self._db._quest)
+        self._db.update_quest(new_quest)
 
 
     def quest_check(self, now: int) -> None:
@@ -2463,9 +2465,8 @@ class DawdleBot(abstract.AbstractBot):
                                 f"their burden is eliminated.")
                 for q in qp:
                     q.nextlvl = int(q.nextlvl * 0.75)
-                self._db._quest = None
                 self._qtimer = now + conf.get("quest_interval_min")
-                self._db.update_quest(self._db._quest)
+                self._db.update_quest(None)
                 log.info("Quest completed (mode 1)")
 
         elif self._db._quest.mode == 2:
