@@ -1976,9 +1976,9 @@ class DawdleBot(abstract.AbstractBot):
                     if rand.randomly('ally_evolve', 20):
                         ally.fullclass = self.random_mount_class(ally.baseclass, ally.level, ally.alignment)
                         if ally.name:
-                            self.notice(player.nick, "{C('name', ally.name)} has evolved into a {ally.fullclass}!")
+                            self.notice(player.nick, f"{C('name', ally.name)} has evolved into a {ally.fullclass}!")
                         else:
-                            self.notice(player.nick, "Your {slot} has evolved into a {ally.fullclass}!")
+                            self.notice(player.nick, f"Your {slot} has evolved into a {ally.fullclass}!")
 
         self._db.write_players(op)
 
