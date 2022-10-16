@@ -13,4 +13,5 @@ urlpatterns = [
     path('players', views.PlayerListView.as_view(), name='player-list'),
     path('player/<path:pk>', views.PlayerDetailView.as_view(), name='player-detail'),
     path('quest', views.QuestView.as_view(), name='quest'),
+    path('dump', views.PlayerDumpView.as_view(), name='dump'),
 ]

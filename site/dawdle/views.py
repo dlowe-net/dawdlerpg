@@ -1,11 +1,16 @@
+import csv
 import io
+import json
 import os
 import time
+
+from xml.dom import minidom
 
 from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.views import generic, View
+from django.views.decorators.vary import vary_on_headers
 
 from PIL import Image, ImageDraw
 
@@ -81,6 +86,44 @@ class PlayerDetailView(generic.DetailView):
         context['total_penalties'] = sum([p.penkick, p.penpart, p.penquit, p.pendropped, p.pennick, p.penmessage, p.penlogout, p.penquest])
         context['total_items'] = p.item_set.aggregate(Sum('level'))['level__sum']
         return context
+
+
+class PlayerDumpView(generic.ListView):
+
+    @vary_on_headers('Accept')
+    def get(self, request, *args, **kwargs):
+        response = HttpResponse()
+        plist = []
+        for p in Player.objects.all():
+            plist.append({
+                "name": p.name,
+                "cclass": p.cclass,
+                "idled": p.idled,
+                "level": p.level,
+                "nick": p.nick,
+                "userhost": p.userhost,
+            })
+        if request.accepts('text/plain') or request.accepts('text/csv'):
+            response.content_type = 'text/csv'
+            writer = csv.DictWriter(response, ('name', 'cclass', 'idled', 'level', 'nick', 'userhost'))
+            writer.writeheader()
+            for p in plist:
+                writer.writerow(p)
+        elif request.accepts('application/json'):
+            response.content_type = 'application/json'
+            json.dump(plist, response, separators=(',',':'))
+        elif request.accepts('application/xml'):
+            response.content_type = 'application/xml'
+            root = minidom.Document()
+            players_el = root.createElement('players')
+            root.appendChild(players_el)
+            for p in plist:
+                el = root.createElement('player')
+                for k,v in p.items():
+                    el.setAttribute(k, str(v))
+                players_el.appendChild(el)
+            root.writexml(response)
+        return response
 
 
 class QuestView(generic.TemplateView):
