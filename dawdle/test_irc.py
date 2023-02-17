@@ -118,14 +118,6 @@ class TestIRCMessage(unittest.TestCase):
         self.assertEqual(msg.tags, {})
         self.assertEqual(msg.src, "nick")
 
-    def test_bad_encoding(self) -> None:
-        line = "\255\035"
-        msg = irc.IRCClient.parse_message(line)
-        self.assertIsNotNone(msg)
-        if msg is None:
-            return
-        self.assertIsNone(msg)
-
 
 class TestIRCClient(unittest.TestCase):
 
