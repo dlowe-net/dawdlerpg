@@ -552,6 +552,7 @@ class TestQuest(unittest.TestCase):
         conf._conf['questfilename'] = "/tmp/testquestfile.txt"
         conf._conf['quest_interval_min'] = 6*3600
         conf._conf['quest_min_level'] = 24
+        conf._conf['quest_min_login'] = 36000
         conf._conf['penquest'] = 15
         conf._conf['penlogout'] = 20
         conf._conf['color'] = False
@@ -745,6 +746,7 @@ class TestGameTick(unittest.TestCase):
         conf._conf['writequestfile'] = True
         conf._conf['questfilename'] = "/tmp/testquestfile.txt"
         conf._conf['quest_min_level'] = 24
+        conf._conf['quest_min_login'] = 0
         conf._conf['self_clock'] = 1
         conf._conf['mapx'] = 500
         conf._conf['mapy'] = 500

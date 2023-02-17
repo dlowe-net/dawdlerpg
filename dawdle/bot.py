@@ -2415,7 +2415,7 @@ class DawdleBot(abstract.AbstractBot):
 
     def quest_start(self, now: int) -> None:
         """Start a random quest with four random players."""
-        latest_login_time = now - 36000
+        latest_login_time = now - conf.get("quest_min_login")
         qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin.timestamp() < latest_login_time]
         if len(qp) < 4:
             return

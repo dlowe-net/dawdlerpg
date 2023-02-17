@@ -71,6 +71,7 @@ def read_config(path: str) -> Dict[str, Any]:
         "quest_interval_min": 12*3600,
         "quest_interval_max": 24*3600,
         "quest_min_level": 24,
+        "quest_min_login": 36000,
         "color": False,
         "namecolor": "cyan",
         "durationcolor": "green",
