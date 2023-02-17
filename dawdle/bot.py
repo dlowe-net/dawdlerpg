@@ -1749,7 +1749,6 @@ class DawdleBot(abstract.AbstractBot):
             self.chanmsg(f"{C('name', player.name)} has called forth a mount for {target.name}.")
             self.find_mount(target)
         elif args == 'quest':
-            self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             if self._db._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
@@ -1757,6 +1756,7 @@ class DawdleBot(abstract.AbstractBot):
             if len(qp) < 4:
                 self.notice(nick, "There's not enough eligible players.")
                 return
+            self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             self.notice(nick, "Starting quest.")
             self.quest_start(int(time.time()))
 
