@@ -664,6 +664,24 @@ class TestQuest(unittest.TestCase):
         self.assertEqual(op[2].nextlvl, 996)
         self.assertEqual(op[3].nextlvl, 996)
 
+
+    def test_cmd_trigger_quest(self):
+        op = [self.bot._db.new_player(pname, 'a', 'b') for pname in "abcd"]
+        now = time.time()
+        for p in op:
+            p.online = True
+            p.nick = p.name
+            p.level = 25
+            p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
+        rand.overrides = {
+            "quest_members": op,
+            "quest_selection": "1 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
+            "quest_time": 12
+        }
+        op[0].admin = True
+        self.bot.cmd_trigger(op[0], op[0].nick, "quest")
+
+
 class TestAdminCommands(unittest.TestCase):
 
     def setUp(self):

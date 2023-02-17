@@ -1752,17 +1752,18 @@ class DawdleBot(abstract.AbstractBot):
             if self._db._quest:
                 self.notice(nick, "There's already a quest on.")
                 return
+            now = int(time.time())
             latest_login_time = now - conf.get("quest_min_login")
             qp = [p for p in self._db.online_players() if p.level > conf.get("quest_min_level") and p.lastlogin.timestamp() < latest_login_time]
             if len(qp) == 0:
                 self.notice(nick, "There are no eligible players.")
                 return
-            elif len(qp) < 4:
+            if len(qp) < 4:
                 self.notice(nick, "There aren't enough eligible players.")
                 return
             self.chanmsg(f"{C('name', player.name)} has called heroes to a quest.")
             self.notice(nick, "Starting quest.")
-            self.quest_start(int(time.time()))
+            self.quest_start(now)
 
 
     def cmd_quest(self, player: Player, nick: str, args: str) -> None:
