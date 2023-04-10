@@ -102,10 +102,11 @@ class PlayerDumpView(generic.ListView):
                 "level": p.level,
                 "nick": p.nick,
                 "userhost": p.userhost,
+                "email": p.email,
             })
         if request.accepts('text/plain') or request.accepts('text/csv'):
             response.content_type = 'text/csv'
-            writer = csv.DictWriter(response, ('name', 'cclass', 'idled', 'level', 'nick', 'userhost'))
+            writer = csv.DictWriter(response, ('name', 'cclass', 'idled', 'level', 'nick', 'userhost', 'email'))
             writer.writeheader()
             for p in plist:
                 writer.writerow(p)

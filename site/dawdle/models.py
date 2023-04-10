@@ -10,6 +10,7 @@ class Player(models.Model):
     name = models.CharField(primary_key=True, max_length=50)
     cclass = models.CharField(max_length=30)
     pw = models.CharField(max_length=64)
+    email = models.CharField(max_length=64)
     alignment = models.CharField(
         max_length=1,
         choices=AlignmentChoices.choices,

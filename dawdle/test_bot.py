@@ -750,6 +750,33 @@ class TestPlayerCommands(unittest.TestCase):
         self.bot.cmd_login(None, "foo", "bar baz")
         self.assertIn("foo", self.irc.chanmsgs[0])
 
+    def test_cmd_email_no_arg_no_email(self):
+        player = self.bot._db.new_player("foo", 'a', 'b')
+        self.bot.cmd_email(player, "foo", "")
+        self.assertEqual("Your account does not have an email set.  You can set it with EMAIL <email>.", self.irc.notices["foo"][0])
+
+    def test_cmd_email_no_arg_with_email(self):
+        player = self.bot._db.new_player("foo", 'a', 'b')
+        player.email = "foo@example.com"
+        self.bot.cmd_email(player, "foo", "")
+        self.assertEqual("Your account email is foo@example.com.", self.irc.notices["foo"][0])
+
+    def test_cmd_email_with_arg_bad_email(self):
+        player = self.bot._db.new_player("foo", 'a', 'b')
+        player.email = "foo@example.com"
+        self.bot.cmd_email(player, "foo", "bar")
+        self.assertEqual(player.email, "foo@example.com")
+        self.assertEqual(self.bot._db._store._mem["foo"].email, "foo@example.com")
+        self.assertEqual("That doesn't look like an email address.", self.irc.notices["foo"][0])
+
+    def test_cmd_email_with_arg_good_email(self):
+        player = self.bot._db.new_player("foo", 'a', 'b')
+        player.email = "foo@example.com"
+        self.bot.cmd_email(player, "foo", "bar@example.com")
+        self.assertEqual(player.email, "bar@example.com")
+        self.assertEqual(self.bot._db._store._mem["foo"].email, "bar@example.com")
+        self.assertEqual("Your email is now set to bar@example.com.", self.irc.notices["foo"][0])
+
 
 class TestGameTick(unittest.TestCase):
 

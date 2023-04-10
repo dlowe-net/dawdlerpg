@@ -152,6 +152,7 @@ class Player(object):
     name: str
     cclass: str
     pw: str
+    email: str
     isadmin: bool
     level: int
     nextlvl: int
@@ -206,6 +207,8 @@ class Player(object):
         p.cclass = pclass
         # hashed password
         p.set_password(ppass)
+        # email address
+        p.email = ""
         # admin bit
         p.isadmin = False
         # level
@@ -527,6 +530,8 @@ class IdleRPGGameStorage(GameStorage):
                 for f in ["isadmin", "online"]:
                     d[f] = (d[f] == '1') # type:ignore
 
+                d['email'] = "" # needed to pass testing
+                
                 d['pendropped'] = 0 # type: ignore
 
                 d['created'] = datetime.datetime.fromtimestamp(int(d['created'])) # type:ignore
@@ -1009,6 +1014,7 @@ class DawdleBot(abstract.AbstractBot):
         "align": "align good|neutral|evil - Change your character's alignment.",
         "logout": "logout - Log out of your account.  You will be penalized!",
         "newpass": "newpass <old password> <new password> - Change your account's password.",
+        "email": "email [<email address>] - set the email address for your account.",
         "removeme": "removeme <password> - Delete your character.",
         "status": "status - Show bot status.",
         "whoami": "whoami - Shows who you are logged in as.",
@@ -1471,6 +1477,25 @@ class DawdleBot(abstract.AbstractBot):
             self._db.write_players([player])
             self.notice(nick, "Your password was changed.")
 
+
+    def cmd_email(self, player: Player, nick: str, args: str) -> None:
+        """View or change email address"""
+        addr = args.split(" ")[0]
+        if addr == "":
+            if player.email == "":
+                self.notice(nick, "Your account does not have an email set.  "
+                            "You can set it with EMAIL <email>.")
+            else:
+                self.notice(nick, f"Your account email is {player.email}.")
+            return
+        if '@' not in addr:
+            self.notice(nick, "That doesn't look like an email address.")
+            return
+
+        player.email = addr
+        self._db.write_players([player])
+        self.notice(nick, f"Your email is now set to {player.email}.")
+        
 
     def cmd_logout(self, player: Player, nick: str, args: str) -> None:
         """stop playing as character."""
