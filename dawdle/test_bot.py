@@ -778,6 +778,78 @@ class TestPlayerCommands(unittest.TestCase):
         self.assertEqual("Your email is now set to bar@example.com.", self.irc.notices["foo"][0])
 
 
+class TestFindItem(unittest.TestCase):
+
+    def setUp(self):
+        conf._conf['rpbase'] = 600
+        conf._conf['rpstep'] = 1.16
+        conf._conf['rpmaxexplvl'] = 60
+        conf._conf['modsfile'] = '/tmp/modsfile.txt'
+        conf._conf['color'] = False
+        self.bot = bot.DawdleBot(bot.GameDB(FakeGameStorage()))
+        self.irc = FakeIRCClient()
+        self.bot.connected(self.irc)
+
+    def test_special_item(self):
+        a = self.bot._db.new_player('a', 'b', 'c')
+        a.nick = 'a'
+        a.items['helm'] = bot.Item(20, '')
+        a.level = 25
+        rand.overrides = {
+            'specitem_find': True,
+            'specitem_level': 5,
+        }
+        self.bot.find_item(a)
+        self.assertIn("Your enemies fall before you", self.irc.notices["a"][0])
+        self.assertEqual(a.items['helm'].level, 55)
+        self.assertEqual(a.items['helm'].name, "Mattt's Omniscience Grand Crown")
+
+    def test_special_has_bigger_item(self):
+        a = self.bot._db.new_player('a', 'b', 'c')
+        a.nick = 'a'
+        a.items['helm'] = bot.Item(60, '')
+        a.level = 25
+        rand.overrides = {
+            'specitem_find': True,
+            'specitem_level': 5,
+        }
+        self.bot.find_item(a)
+        self.assertIn("Your enemies fall before you", self.irc.notices["a"][0])
+        # Note that the level is always higher than the current item.
+        self.assertEqual(a.items['helm'].level, 65)
+        self.assertEqual(a.items['helm'].name, "Mattt's Omniscience Grand Crown")
+
+    def test_higher_level_item(self):
+        a = self.bot._db.new_player('a', 'b', 'c')
+        a.nick = 'a'
+        a.items['amulet'] = bot.Item(60, '')
+        rand.overrides = {
+            'specitem_find': False,
+            'specitem_level': 5,
+            'find_item_slot': 'amulet',
+            'find_item_level': 70,
+        }
+        self.bot.find_item(a)
+        self.assertIn("Luck is with you!", self.irc.notices["a"][0])
+        self.assertEqual(a.items['amulet'].level, 70)
+        self.assertEqual(a.items['amulet'].name, '')
+
+    def test_lower_level_item(self):
+        a = self.bot._db.new_player('a', 'b', 'c')
+        a.nick = 'a'
+        a.items['amulet'] = bot.Item(60, '')
+        rand.overrides = {
+            'specitem_find': False,
+            'specitem_level': 5,
+            'find_item_slot': 'amulet',
+            'find_item_level': 50,
+        }
+        self.bot.find_item(a)
+        self.assertIn("Luck is against you.", self.irc.notices["a"][0])
+        self.assertEqual(a.items['amulet'].level, 60)
+        self.assertEqual(a.items['amulet'].name, '')
+
+
 class TestGameTick(unittest.TestCase):
 
     def setUp(self):

@@ -45,3 +45,5 @@ need to replace them with the `-o key=value` option.
 - Quest pathfinding is much more efficient.
 - Fights caused by map collisions have chance of finding item.
 - All worn items have a chance to get buffs/debuffs instead of a subset.
+- High level character can still get special items.
+- Special items are always buffs.

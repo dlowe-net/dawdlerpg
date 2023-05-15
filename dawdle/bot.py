@@ -531,7 +531,7 @@ class IdleRPGGameStorage(GameStorage):
                     d[f] = (d[f] == '1') # type:ignore
 
                 d['email'] = "" # needed to pass testing
-                
+
                 d['pendropped'] = 0 # type: ignore
 
                 d['created'] = datetime.datetime.fromtimestamp(int(d['created'])) # type:ignore
@@ -1495,7 +1495,7 @@ class DawdleBot(abstract.AbstractBot):
         player.email = addr
         self._db.write_players([player])
         self.notice(nick, f"Your email is now set to {player.email}.")
-        
+
 
     def cmd_logout(self, player: Player, nick: str, args: str) -> None:
         """stop playing as character."""
@@ -2107,7 +2107,6 @@ class DawdleBot(abstract.AbstractBot):
         elif player.alignment == 'e':
             self.chanmsg(f"{player.name} comes upon a level {level} {full_class}, who is swiftly brought to heel!")
 
-
     def find_item(self, player: Player) -> None:
         """Find a random item and add to player if higher level."""
         # TODO: Convert to configuration
@@ -2137,11 +2136,20 @@ class DawdleBot(abstract.AbstractBot):
 
         for si in special_items:
             if player.level >= si.minlvl and rand.randomly('specitem_find', 40):
-                ilvl = si.itemlvl + rand.randint('specitem_level', 0, si.lvlspread)
-                player.acquire_item(si.kind, ilvl, si.name)
+                fudge = rand.randint('specitem_level', 0, si.lvlspread)
+                ilvl = si.itemlvl + fudge
+                # Ensure that the player always gets a boost from
+                # special items.  This differs from the original,
+                # where a more powerful carried or generated item
+                # would override.  This would mean that special items
+                # would gradually be impossible to get.
+                if ilvl <= player.item_level(si.kind):
+                    ilvl = player.item_level(si.kind) + fudge
                 self.notice(player.nick,
                                  f"The light of the gods shines down upon you! You have "
                                  f"found the {C('item')}level {ilvl} {si.name}{C()}!  {si.flavor}")
+                player.acquire_item(si.kind, ilvl, si.name)
+                self._db.write_players([player])
                 return
 
         slot = rand.choice('find_item_slot', Item.SLOTS)
