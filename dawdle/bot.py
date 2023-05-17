@@ -637,7 +637,7 @@ class IdleRPGGameStorage(GameStorage):
 class Sqlite3GameStorage(GameStorage):
     """Player store using sqlite3."""
 
-    FIELDS = ["name", "cclass", "pw", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment"]
+    FIELDS = ["name", "cclass", "pw", "email", "isadmin", "level", "nextlvl", "nick", "userhost", "online", "idled", "posx", "posy", "penmessage", "pennick", "penpart", "penkick", "penquit", "pendropped", "penquest", "penlogout", "created", "lastlogin", "alignment"]
 
 
     _dbpath: str
