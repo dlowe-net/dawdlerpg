@@ -86,6 +86,14 @@ class FakeIRCClient(object):
         return self._users[nick]
 
 
+    def match_user(self, nick, userhost):
+        return nick in self._users and userhost == self._users[nick].userhost
+
+
+    def bot_has_ops(self):
+        return False
+
+
     def resetmsgs(self):
         self.chanmsgs = []
         self.notices = {}
@@ -551,6 +559,7 @@ class TestQuest(unittest.TestCase):
         conf._conf['writequestfile'] = True
         conf._conf['questfilename'] = "/tmp/testquestfile.txt"
         conf._conf['quest_interval_min'] = 6*3600
+        conf._conf['quest_interval_max'] = 12*3600
         conf._conf['quest_min_level'] = 24
         conf._conf['quest_min_login'] = 36000
         conf._conf['penquest'] = 15
@@ -664,9 +673,32 @@ class TestQuest(unittest.TestCase):
         self.assertEqual(op[2].nextlvl, 996)
         self.assertEqual(op[3].nextlvl, 996)
 
+    def test_quest_autologin_failure(self):
+        users = [irc.IRCClient.User(uname, f"{uname}!{uname}@irc.example.com", [], 0) for uname in "abcd"]
+        op = [self.bot._db.new_player(pname, 'a', 'b') for pname in "abcd"]
+        now = time.time()
+        for u,p in zip(users,op):
+            p.online = True
+            p.level = 25
+            p.lastlogin = datetime.datetime.fromtimestamp(now - 36001)
+            p.nick = u.nick
+            p.userhost = u.userhost
+        self.irc._users = dict((user.nick, user) for user in users)
+        rand.overrides = {
+            "quest_members": op,
+            "quest_selection": "2 10 20 30 40 locate the centuries-lost tomes of the grim prophet Haplashak Mhadhu",
+        }
+        self.bot.quest_start(now)
+        self.bot.disconnected()
+        self.bot.connected(self.irc)
+        del self.irc._users["d"]
+        self.bot.ready()
+        self.bot.move_players()
+        self.bot.quest_check(now+50000)
+
 
     def test_cmd_trigger_quest(self):
-        op = [self.bot._db.new_player(pname, 'a', 'b') for pname in "abcd"]
+        op = [self.bot._db.new_player(pname, "a", "b") for pname in "abcd"]
         now = time.time()
         for p in op:
             p.online = True

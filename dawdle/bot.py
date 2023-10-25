@@ -1112,7 +1112,6 @@ class DawdleBot(abstract.AbstractBot):
             if self._irc.match_user(p.nick, p.userhost):
                 autologin.append(p.name)
             else:
-                p.online = False
                 p.lastlogin = datetime.datetime.now()
         self._db.write_players()
         if autologin:
@@ -2410,7 +2409,7 @@ class DawdleBot(abstract.AbstractBot):
             for p in self._db._quest.questors:
                 if not rand.randomly("quest_movement", 10):
                     # Move at 10% speed when questing.
-                    op.remove(p)
+                    op = [x for x in op if x != p]
                     continue
                 # mode 2 questors always move towards the next goal
                 xmove = 0
@@ -2430,7 +2429,7 @@ class DawdleBot(abstract.AbstractBot):
                 p.posx = (p.posx + xmove) % mapx
                 p.posy = (p.posy + ymove) % mapy
                 # take questors out of rotation for movement and pvp
-                op.remove(p)
+                op = [x for x in op if x != p]
 
         for p in op:
             # everyone else wanders aimlessly
