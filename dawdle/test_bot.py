@@ -692,7 +692,7 @@ class TestQuest(unittest.TestCase):
         self.bot.disconnected()
         self.bot.connected(self.irc)
         del self.irc._users["d"]
-        self.bot.ready()
+        self.bot._autologin()
         self.bot.move_players()
         self.bot.quest_check(now+50000)
 

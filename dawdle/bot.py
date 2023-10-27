@@ -1102,11 +1102,8 @@ class DawdleBot(abstract.AbstractBot):
         self._irc.notice(nick, text)
 
 
-    def ready(self) -> None:
-        """Called when bot has finished joining channel."""
-        assert self._irc is not None
-        self._state = 'ready'
-        self.refresh_events()
+    def _autologin(self) -> None:
+        """Check online players for autologin."""
         autologin = []
         for p in self._db.online_players():
             if self._irc.match_user(p.nick, p.userhost):
@@ -1120,6 +1117,14 @@ class DawdleBot(abstract.AbstractBot):
                 self.acquired_ops()
         else:
             self.chanmsg("0 users qualified for auto login.")
+
+
+    def ready(self) -> None:
+        """Called when bot has finished joining channel."""
+        assert self._irc is not None
+        self._state = 'ready'
+        self._autologin()
+        self.refresh_events()
         self._gametick_task = asyncio.create_task(self.gametick_loop())
         self._qtimer = int(time.time()) + rand.randint('qtimer_init',
                                                        conf.get("quest_interval_min"),
