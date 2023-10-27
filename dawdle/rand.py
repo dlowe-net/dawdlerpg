@@ -18,7 +18,7 @@ def randint(key: str, bottom: int, top: int) -> int:
     """Overrideable random func which returns an integer bottom <= i <= top."""
     if key in overrides:
         return cast(int, overrides[key])
-    return random.randint(bottom, top)
+    return random.randint(int(bottom), int(top))
 
 
 def gauss(key: str, mu: float, sigma: float) -> int:
