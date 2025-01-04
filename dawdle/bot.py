@@ -665,6 +665,17 @@ class Sqlite3GameStorage(GameStorage):
         self._dbpath = dbpath
         self._db = None
 
+        def adapt_datetime_iso(val):
+            """Adapt datetime.datetime to timezone-naive ISO 8601 date."""
+            return val.isoformat()
+
+        def convert_datetime(val):
+            """Convert ISO 8601 datetime to datetime.datetime object."""
+            return datetime.datetime.fromisoformat(val.decode())
+
+        sqlite3.register_adapter(datetime.datetime, adapt_datetime_iso)
+        sqlite3.register_converter("datetime", convert_datetime)
+
 
     def create(self) -> None:
         """Initializes a new db."""
@@ -739,7 +750,7 @@ class Sqlite3GameStorage(GameStorage):
                     ally_updates.append((p.name, slot, ally.name, ally.baseclass, ally.fullclass, ally.alignment, ally.level, ally.nextlvl))
                 # Unlike items, allies can be removed.  Not much to do
                 # here but remove all allies and insert them back.
-                con.execute("delete from dawdle_ally where owner_id=:owner_id", (p.name,))
+                con.execute("delete from dawdle_ally where owner_id=?", (p.name,))
                 con.executemany("insert into dawdle_ally (owner_id, slot, name, baseclass, fullclass, alignment, level, nextlvl) values (:owner, :slot, :name, :baseclass, :fullclass, :alignment, :level, :nextlvl)",
                                 ally_updates)
 
