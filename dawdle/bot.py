@@ -605,7 +605,7 @@ class IdleRPGGameStorage(GameStorage):
                 elif key == "P":
                     for pair in chunk.chunk(val.split(' '), 2):
                         q.dests.append((int(pair[0]), int(pair[1])))
-                elif re.match("P\d", key):
+                elif re.match(r"P\d", key):
                     q.questor_names.append(val)
             return q
 
@@ -1023,6 +1023,7 @@ class DawdleBot(abstract.AbstractBot):
         "chclass": "chclass <account> <new class> - Change the character class of the account.",
         "chpass": "chpass <account> <new password> - Change the password of the account.",
         "chuser": "chuser <account> <new name> - Change the name of the account.",
+        "chmail": "chmail <account> <new email> - Change the email of the account.",
         "clearq": "clearq - Clear the sending queue of the bot.",
         "del": "del <account> - Delete the account.",
         "deladmin": "deladmin <account> - Remove admin privileges from account.",
@@ -1104,6 +1105,7 @@ class DawdleBot(abstract.AbstractBot):
 
     def _autologin(self) -> None:
         """Check online players for autologin."""
+        assert self._irc is not None
         autologin = []
         for p in self._db.online_players():
             if self._irc.match_user(p.nick, p.userhost):
@@ -1492,7 +1494,7 @@ class DawdleBot(abstract.AbstractBot):
             else:
                 self.notice(nick, f"Your account email is {player.email}.")
             return
-        if '@' not in addr:
+        if not re.match(r".+@.+", addr):
             self.notice(nick, "That doesn't look like an email address.")
             return
 
@@ -1567,6 +1569,21 @@ class DawdleBot(abstract.AbstractBot):
             self._db.rename_player(parts[0], parts[1])
             self.notice(nick, f"{parts[0]} is now known as {parts[1]}.")
 
+
+    def cmd_chmail(self, player: Player, nick: str, args: str) -> None:
+        """Change someone's email address."""
+        parts = args.split(' ', 1)
+        if len(parts) != 2:
+            self.notice(nick, "Try: CHMAIL <account> <new email address>")
+        elif parts[0] not in self._db:
+            self.notice(nick, f"{parts[0]} is not a valid account.")
+        elif re.match(r".+@.+", parts[1]):
+            self.notice(nick, "That doesn't look like an email address.")
+        else:
+            target = self._db[parts[0]]
+            target.email = parts[1]
+            self._db.write_players([target])
+            self.notice(nick, f"{parts[0]}'s email address changed.")
 
     def cmd_config(self, player: Player, nick: str, args: str) -> None:
         """View/set a configuration setting."""
