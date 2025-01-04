@@ -1004,7 +1004,7 @@ class DawdleBot(abstract.AbstractBot):
     # Commands in ALLOWPLAYERS can only be used by logged-in players
     # All other commands are admin-only
     ALLOWALL = ["help", "info", "login", "register", "quest", "version"]
-    ALLOWPLAYERS = ["align", "logout", "mname", "newpass", "removeme", "status", "whoami"]
+    ALLOWPLAYERS = ["align", "email", "logout", "mname", "newpass", "removeme", "status", "whoami"]
     CMDHELP = {
         "help": "help [<command>] - Display help on commands.",
         "login": "login <account> <password> - Login to your account.",
