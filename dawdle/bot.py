@@ -1532,6 +1532,7 @@ class DawdleBot(abstract.AbstractBot):
             self.notice(nick, "Character classes may not include control codes.")
         else:
             self._db[parts[0]].cclass = parts[1]
+            self._db.write_players([self._db[parts[0]]])
             self.notice(nick, f"{parts[0]}'s character class is now '{parts[1]}'.")
 
 
